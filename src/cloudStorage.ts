@@ -10,6 +10,14 @@ type CloudUploadResult = {
   size: number
 }
 
+type UploadableMedia = {
+  name: string
+  kind: MediaKind
+  blob: Blob
+  mimeType: string
+  size: number
+}
+
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined
 const bucket = (import.meta.env.VITE_SUPABASE_BUCKET as string | undefined) || 'media'
@@ -86,6 +94,15 @@ const buildStoragePath = (file: File) => {
   return `${year}/${month}/${createId()}-${safeName}`
 }
 
+const buildMediaStoragePath = (name: string) => {
+  const date = new Date()
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const safeName = sanitizeFileName(name) || 'media'
+
+  return `${year}/${month}/${createId()}-${safeName}`
+}
+
 const buildJsonPath = (name: string) => {
   const date = new Date()
   const year = date.getFullYear()
@@ -125,6 +142,31 @@ export const uploadFilesToCloud = async (files: File[]): Promise<CloudUploadResu
   }
 
   return uploaded
+}
+
+export const uploadMediaToCloud = async (media: UploadableMedia): Promise<CloudUploadResult> => {
+  const supabase = getSupabase()
+  const user = await requireCloudUser()
+  const storagePath = `${user.id}/${buildMediaStoragePath(media.name)}`
+  const { error } = await supabase.storage.from(bucket).upload(storagePath, media.blob, {
+    cacheControl: '31536000',
+    contentType: media.mimeType || undefined,
+    upsert: false,
+  })
+
+  if (error) {
+    throw new Error(`No se pudo subir ${media.name}: ${error.message}`)
+  }
+
+  const { data } = supabase.storage.from(bucket).getPublicUrl(storagePath)
+
+  return {
+    name: media.name,
+    kind: media.kind,
+    url: data.publicUrl,
+    mimeType: media.mimeType || (media.kind === 'video' ? 'video/mp4' : 'image/*'),
+    size: media.size,
+  }
 }
 
 export const publishJsonToCloud = async (name: string, content: unknown) => {

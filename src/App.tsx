@@ -49,6 +49,7 @@ import {
   signInCloudUser,
   signOutCloudUser,
   uploadFilesToCloud,
+  uploadMediaToCloud,
 } from './cloudStorage'
 import { fetchRemotePlaylist, parseRemotePlaylist } from './playlist'
 import type { MediaItem, MediaItemWithPreview, PublisherSettings, TransitionName } from './types'
@@ -319,7 +320,49 @@ function AdminView() {
     }
 
     try {
+      const localItems = items.filter((item) => item.source === 'local')
+
+      if (localItems.length) {
+        setStatusMessage(`Subiendo ${localItems.length} archivos locales a Supabase...`)
+
+        for (const item of localItems) {
+          const blob = await getMediaBlob(item.id)
+
+          if (!blob) {
+            throw new Error(`No se encontro el archivo local ${item.name}.`)
+          }
+
+          const uploaded = await uploadMediaToCloud({
+            name: item.name,
+            kind: item.kind,
+            blob,
+            mimeType: item.mimeType,
+            size: item.size,
+          })
+
+          await updateMediaItem({
+            id: item.id,
+            name: item.name,
+            kind: item.kind,
+            source: 'remote',
+            url: uploaded.url,
+            mimeType: uploaded.mimeType,
+            size: uploaded.size,
+            durationSeconds: item.durationSeconds,
+            createdAt: item.createdAt,
+          })
+        }
+
+        await refresh()
+      }
+
       const playlist = await exportRemotePlaylist()
+
+      if (!playlist.items.length) {
+        setStatusMessage('No hay contenido remoto para publicar. Carga imagenes o videos y vuelve a publicar.')
+        return
+      }
+
       const url = await publishJsonToCloud('neutralpublisher-playlist', playlist)
 
       setPlaylistUrl(url)

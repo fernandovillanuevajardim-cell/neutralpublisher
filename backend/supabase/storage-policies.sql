@@ -1,8 +1,8 @@
 -- Run this after creating a public bucket named `media`.
 -- These policies allow public reads, but uploads/updates/deletes only inside
 -- the authenticated user's own top-level folder: {auth.uid()}/...
-
-alter table storage.objects enable row level security;
+-- Do not run ALTER TABLE on storage.objects. Supabase owns that internal table
+-- and already manages RLS for Storage.
 
 drop policy if exists "media public read" on storage.objects;
 drop policy if exists "media authenticated upload own folder" on storage.objects;
