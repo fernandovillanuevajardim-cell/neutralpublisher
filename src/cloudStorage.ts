@@ -112,6 +112,17 @@ const buildJsonPath = (name: string) => {
   return `playlists/${year}/${month}/${createId()}-${safeName}.json`
 }
 
+const buildChannelPath = (name = 'principal') => `channels/${sanitizeFileName(name) || 'principal'}.json`
+
+export const getChannelPlaylistUrl = (name = 'principal') => {
+  if (!isCloudStorageConfigured()) {
+    return ''
+  }
+
+  const { data } = getSupabase().storage.from(bucket).getPublicUrl(buildChannelPath(name))
+  return data.publicUrl
+}
+
 export const uploadFilesToCloud = async (files: File[]): Promise<CloudUploadResult[]> => {
   const supabase = getSupabase()
   const user = await requireCloudUser()
@@ -184,6 +195,28 @@ export const publishJsonToCloud = async (name: string, content: unknown) => {
 
   if (error) {
     throw new Error(`No se pudo publicar la playlist: ${error.message}`)
+  }
+
+  const { data } = supabase.storage.from(bucket).getPublicUrl(storagePath)
+
+  return data.publicUrl
+}
+
+export const publishChannelPlaylistToCloud = async (content: unknown, name = 'principal') => {
+  const supabase = getSupabase()
+  await requireCloudUser()
+  const storagePath = buildChannelPath(name)
+  const blob = new Blob([JSON.stringify(content, null, 2)], {
+    type: 'application/json',
+  })
+  const { error } = await supabase.storage.from(bucket).upload(storagePath, blob, {
+    cacheControl: '30',
+    contentType: 'application/json',
+    upsert: true,
+  })
+
+  if (error) {
+    throw new Error(`No se pudo publicar el canal TV: ${error.message}`)
   }
 
   const { data } = supabase.storage.from(bucket).getPublicUrl(storagePath)

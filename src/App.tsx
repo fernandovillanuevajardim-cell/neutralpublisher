@@ -43,8 +43,10 @@ import {
   updateMediaItem,
 } from './storage'
 import {
+  getChannelPlaylistUrl,
   getCloudUser,
   isCloudStorageConfigured,
+  publishChannelPlaylistToCloud,
   publishJsonToCloud,
   signInCloudUser,
   signOutCloudUser,
@@ -111,6 +113,8 @@ const getSamplePlaylistUrl = (displayBaseUrl: string) => {
   const origin = normalizeBaseUrl(displayBaseUrl) || window.location.origin
   return `${origin}${window.location.pathname}sample-playlist.json`
 }
+
+const getDefaultDisplayPlaylistUrl = () => getChannelPlaylistUrl()
 
 const formatBytes = (bytes: number) => {
   if (!bytes) {
@@ -363,11 +367,12 @@ function AdminView() {
         return
       }
 
-      const url = await publishJsonToCloud('neutralpublisher-playlist', playlist)
+      await publishJsonToCloud('neutralpublisher-playlist', playlist)
+      const channelUrl = await publishChannelPlaylistToCloud(playlist)
 
-      setPlaylistUrl(url)
-      saveRemotePlaylistUrl(url)
-      setStatusMessage(`Playlist publicada: ${playlist.items.length} contenidos remotos.`)
+      setPlaylistUrl(channelUrl)
+      saveRemotePlaylistUrl(channelUrl)
+      setStatusMessage(`Playlist publicada: ${playlist.items.length} contenidos remotos. El visor corto ya esta actualizado.`)
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : 'No se pudo publicar la playlist.')
     }
@@ -409,7 +414,7 @@ function AdminView() {
     }
   }
 
-  const displayUrl = buildDisplayUrl(playlistUrl, displayBaseUrl, kioskMode)
+  const displayUrl = buildDisplayUrl('', displayBaseUrl, kioskMode)
 
   const updateDisplayBaseUrl = (value: string) => {
     setDisplayBaseUrl(value)
@@ -821,10 +826,12 @@ function DisplayView() {
   useEffect(() => {
     const sync = async () => {
       const url = getHashPlaylistUrl() || loadRemotePlaylistUrl()
+      const defaultUrl = getDefaultDisplayPlaylistUrl()
+      const syncUrl = url || defaultUrl
 
-      if (url) {
+      if (syncUrl) {
         try {
-          const playlist = await fetchRemotePlaylist(url)
+          const playlist = await fetchRemotePlaylist(syncUrl)
           await replaceWithRemotePlaylist(playlist)
         } catch {
           // The player keeps showing the last cached playlist when sync fails.
@@ -928,10 +935,9 @@ function DisplayView() {
 }
 
 function HomeView() {
-  const playlistUrl = loadRemotePlaylistUrl()
   const displayBaseUrl = loadDisplayBaseUrl()
   const kioskMode = loadKioskMode()
-  const displayUrl = buildDisplayUrl(playlistUrl, displayBaseUrl, kioskMode)
+  const displayUrl = buildDisplayUrl('', displayBaseUrl, kioskMode)
 
   return (
     <main className="home-shell">

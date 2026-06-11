@@ -8,6 +8,9 @@ drop policy if exists "media public read" on storage.objects;
 drop policy if exists "media authenticated upload own folder" on storage.objects;
 drop policy if exists "media authenticated update own folder" on storage.objects;
 drop policy if exists "media authenticated delete own folder" on storage.objects;
+drop policy if exists "media authenticated upload tv channel" on storage.objects;
+drop policy if exists "media authenticated update tv channel" on storage.objects;
+drop policy if exists "media authenticated delete tv channel" on storage.objects;
 
 create policy "media public read"
 on storage.objects
@@ -43,4 +46,35 @@ to authenticated
 using (
   bucket_id = 'media'
   and (storage.foldername(name))[1] = auth.uid()::text
+);
+
+create policy "media authenticated upload tv channel"
+on storage.objects
+for insert
+to authenticated
+with check (
+  bucket_id = 'media'
+  and (storage.foldername(name))[1] = 'channels'
+);
+
+create policy "media authenticated update tv channel"
+on storage.objects
+for update
+to authenticated
+using (
+  bucket_id = 'media'
+  and (storage.foldername(name))[1] = 'channels'
+)
+with check (
+  bucket_id = 'media'
+  and (storage.foldername(name))[1] = 'channels'
+);
+
+create policy "media authenticated delete tv channel"
+on storage.objects
+for delete
+to authenticated
+using (
+  bucket_id = 'media'
+  and (storage.foldername(name))[1] = 'channels'
 );
