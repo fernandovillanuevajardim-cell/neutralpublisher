@@ -30,6 +30,7 @@ import './App.css'
 import {
   addFiles,
   addRemoteMedia,
+  deleteAllMedia,
   deleteMedia,
   exportRemotePlaylist,
   getAllMedia,
@@ -444,16 +445,37 @@ function AdminView() {
         pdfFile,
         pdfQuality,
         ({ page, total }) => {
-          setPdfProgress(`Pagina ${page} de ${total} guardada.`)
+          setPdfProgress(`Pagina ${page} de ${total} lista.`)
         },
         async (file, { page, total }) => {
-          await addFiles([file])
+          if (cloudReady && cloudAuthenticated) {
+            setPdfProgress(`Subiendo pagina ${page} de ${total} a Supabase...`)
+            const uploaded = await uploadMediaToCloud({
+              name: file.name,
+              kind: 'image',
+              blob: file,
+              mimeType: file.type,
+              size: file.size,
+            }, selectedOrganizationId || undefined)
+
+            await addRemoteMedia(uploaded.url, uploaded.name, uploaded.kind, {
+              mimeType: uploaded.mimeType,
+              size: uploaded.size,
+            })
+          } else {
+            await addFiles([file])
+          }
+
           addedPages = page
-          setPdfProgress(`Guardando pagina ${page} de ${total}...`)
+          setPdfProgress(`Guardada pagina ${page} de ${total}.`)
         },
       )
       await refresh()
-      setPdfProgress(`PDF convertido: ${addedPages} imagenes PNG agregadas. Toca Publicar para enviarlas a las pantallas.`)
+      setPdfProgress(
+        cloudReady && cloudAuthenticated
+          ? `PDF convertido y subido: ${addedPages} imagenes PNG agregadas. Toca Publicar para actualizar las pantallas.`
+          : `PDF convertido: ${addedPages} imagenes PNG locales agregadas. Inicia sesion y toca Publicar para enviarlas.`,
+      )
     } catch (error) {
       setPdfProgress(error instanceof Error ? error.message : 'No se pudo convertir el PDF.')
     } finally {
@@ -478,6 +500,12 @@ function AdminView() {
   const removeItem = async (id: string) => {
     await deleteMedia(id)
     await refresh()
+  }
+
+  const clearItems = async () => {
+    await deleteAllMedia()
+    await refresh()
+    setStatusMessage('Lista local limpiada. Toca Publicar para actualizar las pantallas.')
   }
 
   const updateItemDuration = async (item: MediaItemWithPreview, value: string) => {
@@ -1089,10 +1117,16 @@ function AdminView() {
             <h2>Lista de reproduccion</h2>
             <p>{items.length ? `${items.length} elementos listos` : 'Todavia no hay contenido cargado'}</p>
           </div>
-          <a className="display-link" href={displayUrl} target="_blank" rel="noreferrer">
-            <ExternalLink size={16} />
-            <span>Abrir en otra pantalla</span>
-          </a>
+          <div className="library-actions">
+            <button className="display-link danger-link" type="button" disabled={!items.length} onClick={() => void clearItems()}>
+              <Trash2 size={16} />
+              <span>Limpiar lista</span>
+            </button>
+            <a className="display-link" href={displayUrl} target="_blank" rel="noreferrer">
+              <ExternalLink size={16} />
+              <span>Abrir en otra pantalla</span>
+            </a>
+          </div>
         </div>
 
         <div className="media-list">

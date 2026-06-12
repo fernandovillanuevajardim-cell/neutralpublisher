@@ -524,6 +524,23 @@ select {
   white-space: nowrap;
 }
 
+.library-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.danger-link {
+  color: #9f2727;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.danger-link:disabled {
+  color: #9aa6ad;
+  background: #f0f2f4;
+  cursor: not-allowed;
+}
+
 .media-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -1104,6 +1121,11 @@ select {
 
   .display-link {
     justify-content: center;
+  }
+
+  .library-actions {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 
   .weather-clock {

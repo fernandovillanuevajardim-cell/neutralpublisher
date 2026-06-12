@@ -298,3 +298,19 @@ export const deleteMedia = async (id: string) => {
   database.close()
   saveOrder(loadOrder().filter((itemId) => itemId !== id))
 }
+
+export const deleteAllMedia = async () => {
+  const database = await openDatabase()
+  const transaction = database.transaction([mediaStore, blobStore], 'readwrite')
+
+  transaction.objectStore(mediaStore).clear()
+  transaction.objectStore(blobStore).clear()
+
+  await new Promise<void>((resolve, reject) => {
+    transaction.oncomplete = () => resolve()
+    transaction.onerror = () => reject(transaction.error)
+  })
+
+  database.close()
+  saveOrder([])
+}
