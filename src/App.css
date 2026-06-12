@@ -760,6 +760,8 @@ select {
 
 .stage img,
 .stage video {
+  position: relative;
+  z-index: 1;
   display: block;
   object-fit: cover;
   animation-duration: 840ms;
@@ -770,6 +772,35 @@ select {
 .stage[data-fit='contain'] img,
 .stage[data-fit='contain'] video {
   object-fit: contain;
+}
+
+.stage-backdrop {
+  position: absolute;
+  inset: -34px;
+  z-index: 0;
+  overflow: hidden;
+  background: #05070a;
+}
+
+.stage-backdrop::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.stage-backdrop img,
+.stage-backdrop video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(24px) saturate(1.12) brightness(0.82);
+  transform: scale(1.05);
+  animation: none;
+}
+
+.stage[data-fit='contain'] > .stage-media {
+  filter: drop-shadow(0 0 24px rgba(0, 0, 0, 0.34));
 }
 
 .media-preloader {

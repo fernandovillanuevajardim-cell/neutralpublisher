@@ -1382,8 +1382,18 @@ function DisplayView() {
   return (
     <main className={`display-shell transition-${settings.transition}`}>
       <section className="stage" data-fit={settings.fitMode}>
+        {settings.fitMode === 'contain' ? (
+          <div className="stage-backdrop" aria-hidden="true">
+            {activeItem.kind === 'video' ? (
+              <video key={`${activeItem.id}-backdrop`} muted playsInline preload="auto" src={activeItem.previewUrl} />
+            ) : (
+              <img key={`${activeItem.id}-backdrop`} src={activeItem.previewUrl} alt="" decoding="async" />
+            )}
+          </div>
+        ) : null}
         {activeItem.kind === 'video' ? (
           <video
+            className="stage-media"
             key={activeItem.id}
             autoPlay
             loop={items.length === 1}
@@ -1395,7 +1405,7 @@ function DisplayView() {
             onEnded={goToNextItem}
           />
         ) : (
-          <img key={activeItem.id} src={activeItem.previewUrl} alt="" onError={handleMediaError} />
+          <img className="stage-media" key={activeItem.id} src={activeItem.previewUrl} alt="" decoding="async" onError={handleMediaError} />
         )}
       </section>
 
