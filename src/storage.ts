@@ -16,6 +16,7 @@ const orderKey = 'neutral-publisher-order'
 const remotePlaylistUrlKey = 'neutral-publisher-remote-playlist-url'
 const displayBaseUrlKey = 'neutral-publisher-display-base-url'
 const kioskModeKey = 'neutral-publisher-kiosk-mode'
+const organizationIdKey = 'neutral-publisher-organization-id'
 
 type BlobRecord = {
   id: string
@@ -101,6 +102,12 @@ export const loadKioskMode = () => localStorage.getItem(kioskModeKey) === 'true'
 
 export const saveKioskMode = (enabled: boolean) => {
   localStorage.setItem(kioskModeKey, String(enabled))
+}
+
+export const loadOrganizationId = () => localStorage.getItem(organizationIdKey) ?? ''
+
+export const saveOrganizationId = (id: string) => {
+  localStorage.setItem(organizationIdKey, id)
 }
 
 export const getAllMedia = async (): Promise<MediaItem[]> => {

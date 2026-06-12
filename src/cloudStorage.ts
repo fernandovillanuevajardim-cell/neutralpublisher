@@ -10,6 +10,11 @@ type CloudUploadResult = {
   size: number
 }
 
+export type Organization = {
+  id: string
+  name: string
+}
+
 type UploadableMedia = {
   name: string
   kind: MediaKind
@@ -112,25 +117,67 @@ const buildJsonPath = (name: string) => {
   return `playlists/${year}/${month}/${createId()}-${safeName}.json`
 }
 
-const buildChannelPath = (name = 'principal') => `channels/${sanitizeFileName(name) || 'principal'}.json`
+const buildChannelPath = (name = 'principal', organizationId?: string) => {
+  const safeName = sanitizeFileName(name) || 'principal'
+  return organizationId ? `orgs/${organizationId}/channels/${safeName}.json` : `channels/${safeName}.json`
+}
 
-export const getChannelPlaylistUrl = (name = 'principal') => {
+export const getChannelPlaylistUrl = (name = 'principal', organizationId?: string) => {
   if (!isCloudStorageConfigured()) {
     return ''
   }
 
-  const { data } = getSupabase().storage.from(bucket).getPublicUrl(buildChannelPath(name))
+  const { data } = getSupabase().storage.from(bucket).getPublicUrl(buildChannelPath(name, organizationId))
   return data.publicUrl
 }
 
-export const uploadFilesToCloud = async (files: File[]): Promise<CloudUploadResult[]> => {
+export const listOrganizations = async (): Promise<Organization[]> => {
+  const supabase = getSupabase()
+  await requireCloudUser()
+  const { data, error } = await supabase
+    .from('organizations')
+    .select('id, name')
+    .order('name', { ascending: true })
+
+  if (error) {
+    throw new Error(`No se pudieron cargar las organizaciones: ${error.message}`)
+  }
+
+  return data ?? []
+}
+
+export const createOrganization = async (name: string): Promise<Organization> => {
+  const supabase = getSupabase()
+  const user = await requireCloudUser()
+  const cleanName = name.trim()
+
+  if (!cleanName) {
+    throw new Error('Escribe el nombre de la organizacion.')
+  }
+
+  const { data, error } = await supabase
+    .from('organizations')
+    .insert({ name: cleanName, created_by: user.id })
+    .select('id, name')
+    .single()
+
+  if (error) {
+    throw new Error(`No se pudo crear la organizacion: ${error.message}`)
+  }
+
+  return data
+}
+
+export const uploadFilesToCloud = async (files: File[], organizationId?: string): Promise<CloudUploadResult[]> => {
   const supabase = getSupabase()
   const user = await requireCloudUser()
   const uploaded: CloudUploadResult[] = []
 
   for (const file of files) {
     const kind: MediaKind = file.type.startsWith('video/') ? 'video' : 'image'
-    const storagePath = `${user.id}/${buildStoragePath(file)}`
+    const storagePath = organizationId
+      ? `orgs/${organizationId}/media/${buildStoragePath(file)}`
+      : `${user.id}/${buildStoragePath(file)}`
     const { error } = await supabase.storage.from(bucket).upload(storagePath, file, {
       cacheControl: '31536000',
       contentType: file.type || undefined,
@@ -155,10 +202,12 @@ export const uploadFilesToCloud = async (files: File[]): Promise<CloudUploadResu
   return uploaded
 }
 
-export const uploadMediaToCloud = async (media: UploadableMedia): Promise<CloudUploadResult> => {
+export const uploadMediaToCloud = async (media: UploadableMedia, organizationId?: string): Promise<CloudUploadResult> => {
   const supabase = getSupabase()
   const user = await requireCloudUser()
-  const storagePath = `${user.id}/${buildMediaStoragePath(media.name)}`
+  const storagePath = organizationId
+    ? `orgs/${organizationId}/media/${buildMediaStoragePath(media.name)}`
+    : `${user.id}/${buildMediaStoragePath(media.name)}`
   const { error } = await supabase.storage.from(bucket).upload(storagePath, media.blob, {
     cacheControl: '31536000',
     contentType: media.mimeType || undefined,
@@ -202,10 +251,10 @@ export const publishJsonToCloud = async (name: string, content: unknown) => {
   return data.publicUrl
 }
 
-export const publishChannelPlaylistToCloud = async (content: unknown, name = 'principal') => {
+export const publishChannelPlaylistToCloud = async (content: unknown, name = 'principal', organizationId?: string) => {
   const supabase = getSupabase()
   await requireCloudUser()
-  const storagePath = buildChannelPath(name)
+  const storagePath = buildChannelPath(name, organizationId)
   const blob = new Blob([JSON.stringify(content, null, 2)], {
     type: 'application/json',
   })

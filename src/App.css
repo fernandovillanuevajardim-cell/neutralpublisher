@@ -101,6 +101,26 @@
   margin: 0 auto;
 }
 
+.organization-panel {
+  max-width: 1240px;
+  margin: 0 auto 18px;
+}
+
+.organization-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.organization-field {
+  margin-bottom: 0;
+}
+
+.organization-create {
+  white-space: nowrap;
+}
+
 .panel,
 .library {
   border: 1px solid #dce3e8;
@@ -1021,6 +1041,14 @@ select {
 
   .admin-grid {
     grid-template-columns: 1fr;
+  }
+
+  .organization-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .organization-create {
+    width: 100%;
   }
 
   .remote-row {

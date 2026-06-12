@@ -1,6 +1,7 @@
 import {
   ArrowDown,
   ArrowUp,
+  Building2,
   CloudSun,
   X,
   Copy,
@@ -35,26 +36,31 @@ import {
   getMediaBlob,
   loadDisplayBaseUrl,
   loadKioskMode,
+  loadOrganizationId,
   loadRemotePlaylistUrl,
   loadSettings,
   replaceWithRemotePlaylist,
   saveDisplayBaseUrl,
   saveKioskMode,
+  saveOrganizationId,
   saveOrder,
   saveRemotePlaylistUrl,
   saveSettings,
   updateMediaItem,
 } from './storage'
 import {
+  createOrganization,
   getChannelPlaylistUrl,
   getCloudUser,
   isCloudStorageConfigured,
+  listOrganizations,
   publishChannelPlaylistToCloud,
   publishJsonToCloud,
   signInCloudUser,
   signOutCloudUser,
   uploadFilesToCloud,
   uploadMediaToCloud,
+  type Organization,
 } from './cloudStorage'
 import { fetchRemotePlaylist, parseRemotePlaylist } from './playlist'
 import { convertPdfToPngFiles, type PdfConvertQuality } from './pdfTools'
@@ -93,9 +99,13 @@ const getHashKioskMode = () => {
   return value === '1' || value === 'true'
 }
 
+const getHashOrganizationId = () => {
+  return getHashParams().get('org') ?? ''
+}
+
 const normalizeBaseUrl = (value: string) => value.trim().replace(/\/$/, '')
 
-const buildDisplayUrl = (playlistUrl: string, displayBaseUrl: string, kioskMode = false) => {
+const buildDisplayUrl = (playlistUrl: string, displayBaseUrl: string, kioskMode = false, organizationId = '') => {
   const origin = normalizeBaseUrl(displayBaseUrl) || window.location.origin
   const base = `${origin}${window.location.pathname}#/display`
   const url = playlistUrl.trim()
@@ -109,6 +119,10 @@ const buildDisplayUrl = (playlistUrl: string, displayBaseUrl: string, kioskMode 
     params.set('kiosk', '1')
   }
 
+  if (organizationId) {
+    params.set('org', organizationId)
+  }
+
   const query = params.toString()
   return query ? `${base}?${query}` : base
 }
@@ -118,7 +132,7 @@ const getSamplePlaylistUrl = (displayBaseUrl: string) => {
   return `${origin}${window.location.pathname}sample-playlist.json`
 }
 
-const getDefaultDisplayPlaylistUrl = () => getChannelPlaylistUrl()
+const getDefaultDisplayPlaylistUrl = (organizationId?: string) => getChannelPlaylistUrl('principal', organizationId)
 
 const formatBytes = (bytes: number) => {
   if (!bytes) {
@@ -298,6 +312,10 @@ function AdminView() {
   const [isConvertingPdf, setIsConvertingPdf] = useState(false)
   const [shortDisplayUrl, setShortDisplayUrl] = useState('')
   const [isShorteningUrl, setIsShorteningUrl] = useState(false)
+  const [organizations, setOrganizations] = useState<Organization[]>([])
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState(() => loadOrganizationId())
+  const [newOrganizationName, setNewOrganizationName] = useState('')
+  const [organizationMessage, setOrganizationMessage] = useState('')
   const cloudReady = isCloudStorageConfigured()
   const cloudAuthenticated = Boolean(cloudUserEmail)
 
@@ -308,6 +326,31 @@ function AdminView() {
 
     void getCloudUser().then((user) => setCloudUserEmail(user?.email ?? ''))
   }, [cloudReady])
+
+  const refreshOrganizations = useCallback(async () => {
+    if (!cloudReady || !cloudAuthenticated) {
+      setOrganizations([])
+      return
+    }
+
+    try {
+      const nextOrganizations = await listOrganizations()
+      setOrganizations(nextOrganizations)
+
+      if (!selectedOrganizationId && nextOrganizations[0]) {
+        setSelectedOrganizationId(nextOrganizations[0].id)
+        saveOrganizationId(nextOrganizations[0].id)
+      }
+    } catch (error) {
+      setOrganizationMessage(error instanceof Error ? error.message : 'No se pudieron cargar las organizaciones.')
+    }
+  }, [cloudAuthenticated, cloudReady, selectedOrganizationId])
+
+  useEffect(() => {
+    // Supabase data is loaded after the auth state is known.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void refreshOrganizations()
+  }, [refreshOrganizations])
 
   useEffect(() => {
     if (!modalPreviewItem) {
@@ -346,6 +389,7 @@ function AdminView() {
     try {
       const uploaded = await uploadFilesToCloud(
         Array.from(files).filter((file) => file.type.startsWith('image/') || file.type.startsWith('video/')),
+        selectedOrganizationId || undefined,
       )
 
       for (const item of uploaded) {
@@ -359,6 +403,30 @@ function AdminView() {
       setCloudMessage(`Publicados ${uploaded.length} archivos en Supabase.`)
     } catch (error) {
       setCloudMessage(error instanceof Error ? error.message : 'No se pudo publicar en la nube.')
+    }
+  }
+
+  const changeOrganization = (organizationId: string) => {
+    setSelectedOrganizationId(organizationId)
+    saveOrganizationId(organizationId)
+    setShortDisplayUrl('')
+  }
+
+  const addOrganization = async () => {
+    if (!cloudReady || !cloudAuthenticated) {
+      setOrganizationMessage('Inicia sesion para crear una organizacion.')
+      return
+    }
+
+    try {
+      const organization = await createOrganization(newOrganizationName)
+      const nextOrganizations = [...organizations, organization].sort((a, b) => a.name.localeCompare(b.name))
+      setOrganizations(nextOrganizations)
+      setNewOrganizationName('')
+      changeOrganization(organization.id)
+      setOrganizationMessage(`Organizacion creada: ${organization.name}.`)
+    } catch (error) {
+      setOrganizationMessage(error instanceof Error ? error.message : 'No se pudo crear la organizacion.')
     }
   }
 
@@ -480,7 +548,7 @@ function AdminView() {
             blob,
             mimeType: item.mimeType,
             size: item.size,
-          })
+          }, selectedOrganizationId || undefined)
 
           await updateMediaItem({
             id: item.id,
@@ -506,7 +574,7 @@ function AdminView() {
       }
 
       await publishJsonToCloud('neutralpublisher-playlist', playlist)
-      const channelUrl = await publishChannelPlaylistToCloud(playlist)
+      const channelUrl = await publishChannelPlaylistToCloud(playlist, 'principal', selectedOrganizationId || undefined)
 
       setPlaylistUrl(channelUrl)
       saveRemotePlaylistUrl(channelUrl)
@@ -552,7 +620,7 @@ function AdminView() {
     }
   }
 
-  const displayUrl = buildDisplayUrl('', displayBaseUrl, kioskMode)
+  const displayUrl = buildDisplayUrl('', displayBaseUrl, kioskMode, selectedOrganizationId)
   const tvUrl = shortDisplayUrl || displayUrl
 
   const updateDisplayBaseUrl = (value: string) => {
@@ -641,6 +709,53 @@ function AdminView() {
           </button>
         </nav>
       </header>
+
+      <section className="panel organization-panel">
+        <div className="panel-heading">
+          <Building2 size={20} />
+          <h2>Organizacion</h2>
+        </div>
+
+        <div className="organization-grid">
+          <label className="field organization-field">
+            <span>Empresa activa</span>
+            <select
+              value={selectedOrganizationId}
+              disabled={!cloudReady || !cloudAuthenticated}
+              onChange={(event) => changeOrganization(event.target.value)}
+            >
+              <option value="">Canal principal sin empresa</option>
+              {organizations.map((organization) => (
+                <option key={organization.id} value={organization.id}>
+                  {organization.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="field organization-field">
+            <span>Nueva empresa</span>
+            <input
+              disabled={!cloudReady || !cloudAuthenticated}
+              placeholder="Ej: Farmacia Centro"
+              value={newOrganizationName}
+              onChange={(event) => setNewOrganizationName(event.target.value)}
+            />
+          </label>
+
+          <button
+            className="icon-button labeled organization-create"
+            type="button"
+            disabled={!cloudReady || !cloudAuthenticated || !newOrganizationName.trim()}
+            onClick={() => void addOrganization()}
+          >
+            <Plus size={18} />
+            <span>Crear</span>
+          </button>
+        </div>
+
+        {organizationMessage ? <p className="status-message">{organizationMessage}</p> : null}
+      </section>
 
       <section className="admin-grid">
         <div className="panel upload-panel">
@@ -1084,6 +1199,7 @@ function DisplayView() {
   const [weather, setWeather] = useState<WeatherSnapshot | null>(null)
   const [playbackMessage, setPlaybackMessage] = useState('')
   const kioskMode = getHashKioskMode()
+  const organizationId = getHashOrganizationId()
 
   const safeActiveIndex = items.length ? activeIndex % items.length : 0
   const activeItem = items[safeActiveIndex]
@@ -1148,8 +1264,8 @@ function DisplayView() {
 
   useEffect(() => {
     const sync = async () => {
-      const url = getHashPlaylistUrl() || loadRemotePlaylistUrl()
-      const defaultUrl = getDefaultDisplayPlaylistUrl()
+      const url = getHashPlaylistUrl() || (organizationId ? '' : loadRemotePlaylistUrl())
+      const defaultUrl = getDefaultDisplayPlaylistUrl(organizationId || undefined)
       const syncUrl = url || defaultUrl
 
       if (syncUrl) {
@@ -1169,7 +1285,7 @@ function DisplayView() {
 
     const interval = window.setInterval(() => void sync(), 60_000)
     return () => window.clearInterval(interval)
-  }, [refresh])
+  }, [organizationId, refresh])
 
   const formattedClock = useMemo(
     () =>
