@@ -295,6 +295,8 @@ function AdminView() {
   const [pdfQuality, setPdfQuality] = useState<PdfConvertQuality>(300)
   const [pdfProgress, setPdfProgress] = useState('')
   const [isConvertingPdf, setIsConvertingPdf] = useState(false)
+  const [shortDisplayUrl, setShortDisplayUrl] = useState('')
+  const [isShorteningUrl, setIsShorteningUrl] = useState(false)
   const cloudReady = isCloudStorageConfigured()
   const cloudAuthenticated = Boolean(cloudUserEmail)
 
@@ -550,23 +552,51 @@ function AdminView() {
   }
 
   const displayUrl = buildDisplayUrl('', displayBaseUrl, kioskMode)
+  const tvUrl = shortDisplayUrl || displayUrl
 
   const updateDisplayBaseUrl = (value: string) => {
+    setShortDisplayUrl('')
     setDisplayBaseUrl(value)
     saveDisplayBaseUrl(value)
   }
 
   const updateKioskMode = (enabled: boolean) => {
+    setShortDisplayUrl('')
     setKioskMode(enabled)
     saveKioskMode(enabled)
   }
 
   const copyDisplayUrl = async () => {
     try {
-      await navigator.clipboard.writeText(displayUrl)
+      await navigator.clipboard.writeText(tvUrl)
       setLinkMessage('Enlace copiado.')
     } catch {
       setLinkMessage('No se pudo copiar el enlace.')
+    }
+  }
+
+  const shortenDisplayUrl = async () => {
+    if (displayUrl.includes('127.0.0.1') || displayUrl.includes('localhost')) {
+      setLinkMessage('Para acortar usa primero el enlace publico, no localhost.')
+      return
+    }
+
+    try {
+      setIsShorteningUrl(true)
+      setLinkMessage('Generando enlace corto...')
+      const response = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(displayUrl)}`)
+      const text = (await response.text()).trim()
+
+      if (!response.ok || !/^https?:\/\//.test(text)) {
+        throw new Error('No se pudo generar el enlace corto.')
+      }
+
+      setShortDisplayUrl(text)
+      setLinkMessage('Enlace corto listo.')
+    } catch (error) {
+      setLinkMessage(error instanceof Error ? error.message : 'No se pudo generar el enlace corto.')
+    } finally {
+      setIsShorteningUrl(false)
     }
   }
 
@@ -884,7 +914,7 @@ function AdminView() {
 
         <div className="tv-link-grid">
           <div className="qr-box" aria-label="QR del visor">
-            <QRCodeSVG value={displayUrl} size={132} marginSize={1} />
+            <QRCodeSVG value={tvUrl} size={132} marginSize={1} />
           </div>
           <div className="tv-link-copy">
             <label className="field tv-base-field">
@@ -895,7 +925,7 @@ function AdminView() {
                 onChange={(event) => updateDisplayBaseUrl(event.target.value)}
               />
             </label>
-            <input readOnly value={displayUrl} aria-label="URL del visor" />
+            <input readOnly value={tvUrl} aria-label="URL del visor" />
             {displayUrl.includes('127.0.0.1') || displayUrl.includes('localhost') ? (
               <p className="warning-message">Para celular o TV usa la IP de la PC, no 127.0.0.1.</p>
             ) : null}
@@ -908,7 +938,17 @@ function AdminView() {
                 <Copy size={18} />
                 <span>Copiar</span>
               </button>
-              <a className="icon-button labeled" href={displayUrl} target="_blank" rel="noreferrer" title="Abrir visor">
+              <button
+                className="icon-button labeled"
+                type="button"
+                disabled={isShorteningUrl}
+                onClick={() => void shortenDisplayUrl()}
+                title="Crear enlace corto"
+              >
+                <Link size={18} />
+                <span>{shortDisplayUrl ? 'Acortado' : 'Acortar'}</span>
+              </button>
+              <a className="icon-button labeled" href={tvUrl} target="_blank" rel="noreferrer" title="Abrir visor">
                 <ExternalLink size={18} />
                 <span>Abrir</span>
               </a>
