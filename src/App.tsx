@@ -6,6 +6,7 @@ import {
   Copy,
   Download,
   ExternalLink,
+  FileImage,
   FileUp,
   Eye,
   CloudUpload,
@@ -56,6 +57,7 @@ import {
   uploadMediaToCloud,
 } from './cloudStorage'
 import { fetchRemotePlaylist, parseRemotePlaylist } from './playlist'
+import { convertPdfToPngFiles, type PdfConvertQuality } from './pdfTools'
 import type { MediaItem, MediaItemWithPreview, PublisherSettings, TransitionName } from './types'
 
 const transitions: Array<{ value: TransitionName; label: string }> = [
@@ -289,6 +291,10 @@ function AdminView() {
   const [cloudPassword, setCloudPassword] = useState('')
   const [cloudUserEmail, setCloudUserEmail] = useState('')
   const [previewItem, setPreviewItem] = useState<MediaItemWithPreview | null>(null)
+  const [pdfFile, setPdfFile] = useState<File | null>(null)
+  const [pdfQuality, setPdfQuality] = useState<PdfConvertQuality>(300)
+  const [pdfProgress, setPdfProgress] = useState('')
+  const [isConvertingPdf, setIsConvertingPdf] = useState(false)
   const cloudReady = isCloudStorageConfigured()
   const cloudAuthenticated = Boolean(cloudUserEmail)
 
@@ -350,6 +356,28 @@ function AdminView() {
       setCloudMessage(`Publicados ${uploaded.length} archivos en Supabase.`)
     } catch (error) {
       setCloudMessage(error instanceof Error ? error.message : 'No se pudo publicar en la nube.')
+    }
+  }
+
+  const convertPdf = async () => {
+    if (!pdfFile || isConvertingPdf) {
+      return
+    }
+
+    try {
+      setIsConvertingPdf(true)
+      setPdfProgress('Preparando PDF...')
+      const files = await convertPdfToPngFiles(pdfFile, pdfQuality, ({ page, total }) => {
+        setPdfProgress(`Pagina ${page} de ${total} convertida.`)
+      })
+
+      await addFiles(files)
+      await refresh()
+      setPdfProgress(`PDF convertido: ${files.length} imagenes PNG agregadas.`)
+    } catch (error) {
+      setPdfProgress(error instanceof Error ? error.message : 'No se pudo convertir el PDF.')
+    } finally {
+      setIsConvertingPdf(false)
     }
   }
 
@@ -763,6 +791,45 @@ function AdminView() {
             <span>Marca discreta</span>
           </label>
         </div>
+      </section>
+
+      <section className="panel pdf-panel">
+        <div className="panel-heading">
+          <FileImage size={20} />
+          <h2>PDF a PNG</h2>
+        </div>
+
+        <div className="pdf-grid">
+          <label className="pdf-file-button">
+            <FileUp size={18} />
+            <span>{pdfFile ? pdfFile.name : 'Cargar PDF'}</span>
+            <input accept="application/pdf,.pdf" type="file" onChange={(event) => setPdfFile(event.target.files?.[0] ?? null)} />
+          </label>
+
+          <div className="segmented pdf-quality" aria-label="Calidad de PDF">
+            <button className={pdfQuality === 300 ? 'active' : ''} type="button" onClick={() => setPdfQuality(300)}>
+              300 DPI
+            </button>
+            <button className={pdfQuality === 600 ? 'active' : ''} type="button" onClick={() => setPdfQuality(600)}>
+              600 DPI
+            </button>
+          </div>
+
+          <button
+            className="icon-button labeled pdf-convert-button"
+            type="button"
+            disabled={!pdfFile || isConvertingPdf}
+            onClick={() => void convertPdf()}
+          >
+            <Download size={18} />
+            <span>{isConvertingPdf ? 'Convirtiendo' : 'Convertir a PNG'}</span>
+          </button>
+        </div>
+
+        <p className="pdf-help">
+          300 DPI es recomendado para web y TV. 600 DPI genera mas detalle, pero tarda mas y crea archivos grandes.
+        </p>
+        {pdfProgress ? <p className="status-message">{pdfProgress}</p> : null}
       </section>
 
       <section className="panel sync-panel">

@@ -342,6 +342,63 @@ select {
   margin: 18px auto 0;
 }
 
+.pdf-panel {
+  max-width: 1240px;
+  margin: 18px auto 0;
+}
+
+.pdf-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.pdf-file-button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+  gap: 9px;
+  overflow: hidden;
+  border: 1px solid #cbd7de;
+  border-radius: 7px;
+  padding: 0 12px;
+  color: #1b3340;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.pdf-file-button span {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdf-file-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.pdf-quality {
+  min-width: 220px;
+  margin: 0;
+}
+
+.pdf-convert-button {
+  white-space: nowrap;
+}
+
+.pdf-help {
+  margin: 12px 0 0;
+  color: #657783;
+  font-size: 14px;
+}
+
 .tv-link-panel {
   max-width: 1240px;
   margin: 18px auto 0;
@@ -971,6 +1028,15 @@ select {
 
   .sync-grid {
     grid-template-columns: 1fr;
+  }
+
+  .pdf-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pdf-quality,
+  .pdf-convert-button {
+    width: 100%;
   }
 
   .sync-grid .icon-button,
