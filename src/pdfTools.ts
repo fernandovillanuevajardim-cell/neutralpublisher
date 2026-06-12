@@ -7,6 +7,8 @@ type ConvertProgress = {
   total: number
 }
 
+type ConvertPage = (file: File, progress: ConvertProgress) => Promise<void> | void
+
 const blobFromCanvas = (canvas: HTMLCanvasElement) =>
   new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => {
@@ -32,6 +34,7 @@ export const convertPdfToPngFiles = async (
   file: File,
   quality: PdfConvertQuality,
   onProgress?: (progress: ConvertProgress) => void,
+  onPage?: ConvertPage,
 ) => {
   const pdfjs = await import('pdfjs-dist')
   pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
@@ -58,15 +61,22 @@ export const convertPdfToPngFiles = async (
     await page.render({ canvas, canvasContext: context, viewport }).promise
 
     const blob = await blobFromCanvas(canvas)
-    files.push(new File([blob], `${baseName}-pagina-${String(pageNumber).padStart(2, '0')}-${quality}dpi.png`, {
+    const pngFile = new File([blob], `${baseName}-pagina-${String(pageNumber).padStart(2, '0')}-${quality}dpi.png`, {
       type: 'image/png',
       lastModified: Date.now(),
-    }))
+    })
+    const progress = { page: pageNumber, total: pdf.numPages }
+
+    if (onPage) {
+      await onPage(pngFile, progress)
+    } else {
+      files.push(pngFile)
+    }
 
     canvas.width = 1
     canvas.height = 1
     page.cleanup()
-    onProgress?.({ page: pageNumber, total: pdf.numPages })
+    onProgress?.(progress)
   }
 
   await pdf.cleanup()

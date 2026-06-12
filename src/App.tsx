@@ -438,13 +438,22 @@ function AdminView() {
     try {
       setIsConvertingPdf(true)
       setPdfProgress('Preparando PDF...')
-      const files = await convertPdfToPngFiles(pdfFile, pdfQuality, ({ page, total }) => {
-        setPdfProgress(`Pagina ${page} de ${total} convertida.`)
-      })
+      let addedPages = 0
 
-      await addFiles(files)
+      await convertPdfToPngFiles(
+        pdfFile,
+        pdfQuality,
+        ({ page, total }) => {
+          setPdfProgress(`Pagina ${page} de ${total} guardada.`)
+        },
+        async (file, { page, total }) => {
+          await addFiles([file])
+          addedPages = page
+          setPdfProgress(`Guardando pagina ${page} de ${total}...`)
+        },
+      )
       await refresh()
-      setPdfProgress(`PDF convertido: ${files.length} imagenes PNG agregadas.`)
+      setPdfProgress(`PDF convertido: ${addedPages} imagenes PNG agregadas. Toca Publicar para enviarlas a las pantallas.`)
     } catch (error) {
       setPdfProgress(error instanceof Error ? error.message : 'No se pudo convertir el PDF.')
     } finally {
@@ -1102,7 +1111,7 @@ function AdminView() {
                 {item.kind === 'video' ? (
                   <video src={item.previewUrl} muted playsInline />
                 ) : (
-                  <img src={item.previewUrl} alt="" />
+                  <img src={item.previewUrl} alt="" decoding="async" loading="lazy" />
                 )}
                 <span>{item.kind === 'video' ? 'Video' : 'Imagen'}</span>
               </button>
@@ -1146,7 +1155,7 @@ function AdminView() {
               {hoverPreviewItem.kind === 'video' ? (
                 <video src={hoverPreviewItem.previewUrl} muted playsInline />
               ) : (
-                <img src={hoverPreviewItem.previewUrl} alt="" />
+                <img src={hoverPreviewItem.previewUrl} alt="" decoding="async" />
               )}
             </div>
             <div className="preview-meta">
@@ -1170,7 +1179,7 @@ function AdminView() {
               {modalPreviewItem.kind === 'video' ? (
                 <video src={modalPreviewItem.previewUrl} muted playsInline controls />
               ) : (
-                <img src={modalPreviewItem.previewUrl} alt="" />
+                <img src={modalPreviewItem.previewUrl} alt="" decoding="async" />
               )}
             </div>
             <div className="preview-meta">
