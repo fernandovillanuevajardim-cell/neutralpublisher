@@ -869,11 +869,9 @@ function AdminView() {
               <button
                 className="thumb"
                 type="button"
-                onBlur={() => setPreviewItem(null)}
                 onClick={() => setPreviewItem(item)}
                 onFocus={() => setPreviewItem(item)}
                 onMouseEnter={() => setPreviewItem(item)}
-                onMouseLeave={() => setPreviewItem(null)}
                 title="Previsualizar"
               >
                 {item.kind === 'video' ? (
