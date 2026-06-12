@@ -148,7 +148,7 @@ export const listOrganizations = async (): Promise<Organization[]> => {
 
 export const createOrganization = async (name: string): Promise<Organization> => {
   const supabase = getSupabase()
-  const user = await requireCloudUser()
+  await requireCloudUser()
   const cleanName = name.trim()
 
   if (!cleanName) {
@@ -157,7 +157,7 @@ export const createOrganization = async (name: string): Promise<Organization> =>
 
   const { data, error } = await supabase
     .from('organizations')
-    .insert({ name: cleanName, created_by: user.id })
+    .insert({ name: cleanName })
     .select('id, name')
     .single()
 

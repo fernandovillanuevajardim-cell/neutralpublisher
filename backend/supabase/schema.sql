@@ -229,6 +229,27 @@ begin
 end;
 $$;
 
+create or replace function public.set_organization_created_by()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.created_by is null then
+    new.created_by := auth.uid();
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists organizations_set_created_by on public.organizations;
+create trigger organizations_set_created_by
+before insert on public.organizations
+for each row
+execute function public.set_organization_created_by();
+
 drop trigger if exists organizations_add_owner on public.organizations;
 create trigger organizations_add_owner
 after insert on public.organizations
@@ -272,7 +293,7 @@ create policy "organizations insert authenticated"
 on public.organizations
 for insert
 to authenticated
-with check (created_by = auth.uid());
+with check (auth.uid() is not null);
 
 create policy "organizations update manager"
 on public.organizations
