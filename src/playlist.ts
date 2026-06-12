@@ -55,6 +55,8 @@ export const parseRemotePlaylist = (value: unknown): RemotePlaylist => {
       transition,
       fitMode,
       showClock: typeof rawSettings.showClock === 'boolean' ? rawSettings.showClock : defaultSettings.showClock,
+      showWeather: typeof rawSettings.showWeather === 'boolean' ? rawSettings.showWeather : defaultSettings.showWeather,
+      weatherCity: toString(rawSettings.weatherCity, defaultSettings.weatherCity),
       showBadge: typeof rawSettings.showBadge === 'boolean' ? rawSettings.showBadge : defaultSettings.showBadge,
       videoMuted: typeof rawSettings.videoMuted === 'boolean' ? rawSettings.videoMuted : defaultSettings.videoMuted,
     },

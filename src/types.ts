@@ -33,6 +33,8 @@ export type PublisherSettings = {
   transition: TransitionName
   fitMode: FitMode
   showClock: boolean
+  showWeather: boolean
+  weatherCity: string
   showBadge: boolean
   videoMuted: boolean
 }
@@ -42,6 +44,8 @@ export const defaultSettings: PublisherSettings = {
   transition: 'fade',
   fitMode: 'cover',
   showClock: true,
+  showWeather: false,
+  weatherCity: 'Mendoza',
   showBadge: false,
   videoMuted: true,
 }

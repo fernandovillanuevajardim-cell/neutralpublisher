@@ -1,6 +1,7 @@
 import {
   ArrowDown,
   ArrowUp,
+  CloudSun,
   Copy,
   Download,
   ExternalLink,
@@ -131,6 +132,95 @@ const formatBytes = (bytes: number) => {
   }
 
   return `${size.toFixed(size >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`
+}
+
+type WeatherSnapshot = {
+  city: string
+  temperature: number
+  label: string
+}
+
+const weatherLabels: Record<number, string> = {
+  0: 'Despejado',
+  1: 'Mayormente claro',
+  2: 'Parcialmente nublado',
+  3: 'Nublado',
+  45: 'Niebla',
+  48: 'Niebla',
+  51: 'Llovizna',
+  53: 'Llovizna',
+  55: 'Llovizna',
+  61: 'Lluvia',
+  63: 'Lluvia',
+  65: 'Lluvia fuerte',
+  71: 'Nieve',
+  73: 'Nieve',
+  75: 'Nieve fuerte',
+  80: 'Chaparrones',
+  81: 'Chaparrones',
+  82: 'Chaparrones fuertes',
+  95: 'Tormenta',
+  96: 'Tormenta',
+  99: 'Tormenta fuerte',
+}
+
+const getWeatherLabel = (code: number) => weatherLabels[code] ?? 'Clima'
+
+const fetchWeather = async (city: string): Promise<WeatherSnapshot | null> => {
+  const cleanCity = city.trim()
+
+  if (!cleanCity) {
+    return null
+  }
+
+  const geocodeUrl = new URL('https://geocoding-api.open-meteo.com/v1/search')
+  geocodeUrl.searchParams.set('name', cleanCity)
+  geocodeUrl.searchParams.set('count', '1')
+  geocodeUrl.searchParams.set('language', 'es')
+  geocodeUrl.searchParams.set('format', 'json')
+
+  const geocodeResponse = await fetch(geocodeUrl, { cache: 'force-cache' })
+
+  if (!geocodeResponse.ok) {
+    return null
+  }
+
+  const geocode = (await geocodeResponse.json()) as {
+    results?: Array<{ latitude: number; longitude: number; name: string }>
+  }
+  const place = geocode.results?.[0]
+
+  if (!place) {
+    return null
+  }
+
+  const forecastUrl = new URL('https://api.open-meteo.com/v1/forecast')
+  forecastUrl.searchParams.set('latitude', String(place.latitude))
+  forecastUrl.searchParams.set('longitude', String(place.longitude))
+  forecastUrl.searchParams.set('current', 'temperature_2m,weather_code')
+  forecastUrl.searchParams.set('timezone', 'auto')
+
+  const forecastResponse = await fetch(forecastUrl, { cache: 'no-store' })
+
+  if (!forecastResponse.ok) {
+    return null
+  }
+
+  const forecast = (await forecastResponse.json()) as {
+    current?: { temperature_2m?: number; weather_code?: number }
+  }
+  const temperature = forecast.current?.temperature_2m
+  const code = forecast.current?.weather_code
+
+  if (typeof temperature !== 'number' || typeof code !== 'number') {
+    return null
+  }
+
+  return {
+    city: place.name,
+    temperature,
+    label: getWeatherLabel(code),
+  }
 }
 
 const makePreviewItems = async (items: MediaItem[]) => {
@@ -623,6 +713,24 @@ function AdminView() {
           </label>
           <label className="check">
             <input
+              checked={settings.showWeather}
+              type="checkbox"
+              onChange={(event) => updateSettings({ ...settings, showWeather: event.target.checked })}
+            />
+            <span>Mostrar clima</span>
+          </label>
+          {settings.showWeather ? (
+            <label className="field compact-field">
+              <span>Ciudad del clima</span>
+              <input
+                placeholder="Mendoza"
+                value={settings.weatherCity}
+                onChange={(event) => updateSettings({ ...settings, weatherCity: event.target.value })}
+              />
+            </label>
+          ) : null}
+          <label className="check">
+            <input
               checked={settings.videoMuted}
               type="checkbox"
               onChange={(event) => updateSettings({ ...settings, videoMuted: event.target.checked })}
@@ -789,6 +897,7 @@ function DisplayView() {
   const { items, settings, refresh } = usePublisherData()
   const [activeIndex, setActiveIndex] = useState(0)
   const [clock, setClock] = useState(() => new Date())
+  const [weather, setWeather] = useState<WeatherSnapshot | null>(null)
   const [playbackMessage, setPlaybackMessage] = useState('')
   const kioskMode = getHashKioskMode()
 
@@ -810,6 +919,36 @@ function DisplayView() {
     const interval = window.setInterval(() => setClock(new Date()), 1000)
     return () => window.clearInterval(interval)
   }, [])
+
+  useEffect(() => {
+    if (!settings.showWeather) {
+      return
+    }
+
+    let cancelled = false
+
+    const syncWeather = async () => {
+      try {
+        const snapshot = await fetchWeather(settings.weatherCity)
+
+        if (!cancelled) {
+          setWeather(snapshot)
+        }
+      } catch {
+        if (!cancelled) {
+          setWeather(null)
+        }
+      }
+    }
+
+    void syncWeather()
+    const interval = window.setInterval(() => void syncWeather(), 30 * 60 * 1000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [settings.showWeather, settings.weatherCity])
 
   useEffect(() => {
     if (!items.length || activeItem?.kind === 'video') {
@@ -855,6 +994,16 @@ function DisplayView() {
         minute: '2-digit',
         day: '2-digit',
         month: '2-digit',
+      }).format(clock),
+    [clock],
+  )
+  const formattedWidgetDate = useMemo(
+    () =>
+      new Intl.DateTimeFormat('es-AR', {
+        day: 'numeric',
+        month: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
       }).format(clock),
     [clock],
   )
@@ -916,7 +1065,23 @@ function DisplayView() {
         </div>
       ) : null}
 
-      {settings.showClock ? <div className="clock">{formattedClock}</div> : null}
+      {settings.showWeather ? (
+        <aside className="weather-clock" aria-label="Clima y hora">
+          <div className="weather-row">
+            <CloudSun className="weather-icon" aria-hidden="true" />
+            <div className="weather-temp">
+              {weather ? `${Math.round(weather.temperature)}°` : '--°'}
+            </div>
+          </div>
+          <div className="weather-meta">
+            <span>{weather?.city || settings.weatherCity || 'Clima'}</span>
+            <span>{weather?.label || 'Actualizando'}</span>
+          </div>
+          {settings.showClock ? <div className="weather-date">{formattedWidgetDate}</div> : null}
+        </aside>
+      ) : settings.showClock ? (
+        <div className="clock">{formattedClock}</div>
+      ) : null}
       {settings.showBadge ? <div className="brand-badge">NeutralPublisher</div> : null}
       {playbackMessage ? <div className="playback-message">{playbackMessage}</div> : null}
 
