@@ -229,6 +229,45 @@ begin
 end;
 $$;
 
+create or replace function public.create_organization_for_current_user(org_name text)
+returns table(id uuid, name text)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  new_org_id uuid;
+  clean_name text;
+  current_user_id uuid;
+begin
+  current_user_id := auth.uid();
+  clean_name := nullif(trim(org_name), '');
+
+  if current_user_id is null then
+    raise exception 'Inicia sesion para crear una organizacion.';
+  end if;
+
+  if clean_name is null then
+    raise exception 'Escribe el nombre de la organizacion.';
+  end if;
+
+  insert into public.organizations (name, created_by)
+  values (clean_name, current_user_id)
+  returning organizations.id into new_org_id;
+
+  insert into public.organization_members (organization_id, user_id, role)
+  values (new_org_id, current_user_id, 'owner')
+  on conflict (organization_id, user_id) do update set role = excluded.role;
+
+  return query
+  select organizations.id, organizations.name
+  from public.organizations
+  where organizations.id = new_org_id;
+end;
+$$;
+
+grant execute on function public.create_organization_for_current_user(text) to authenticated;
+
 create or replace function public.set_organization_created_by()
 returns trigger
 language plpgsql

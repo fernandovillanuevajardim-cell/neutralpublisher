@@ -156,10 +156,8 @@ export const createOrganization = async (name: string): Promise<Organization> =>
   }
 
   const { data, error } = await supabase
-    .from('organizations')
-    .insert({ name: cleanName })
-    .select('id, name')
-    .single()
+    .rpc('create_organization_for_current_user', { org_name: cleanName })
+    .single<Organization>()
 
   if (error) {
     throw new Error(`No se pudo crear la organizacion: ${error.message}`)
