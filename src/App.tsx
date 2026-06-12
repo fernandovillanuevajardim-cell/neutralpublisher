@@ -2,6 +2,7 @@ import {
   ArrowDown,
   ArrowUp,
   CloudSun,
+  X,
   Copy,
   Download,
   ExternalLink,
@@ -287,6 +288,7 @@ function AdminView() {
   const [cloudEmail, setCloudEmail] = useState('')
   const [cloudPassword, setCloudPassword] = useState('')
   const [cloudUserEmail, setCloudUserEmail] = useState('')
+  const [previewItem, setPreviewItem] = useState<MediaItemWithPreview | null>(null)
   const cloudReady = isCloudStorageConfigured()
   const cloudAuthenticated = Boolean(cloudUserEmail)
 
@@ -297,6 +299,21 @@ function AdminView() {
 
     void getCloudUser().then((user) => setCloudUserEmail(user?.email ?? ''))
   }, [cloudReady])
+
+  useEffect(() => {
+    if (!previewItem) {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setPreviewItem(null)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [previewItem])
 
   const handleFiles = async (files: FileList | null) => {
     if (!files?.length) {
@@ -849,14 +866,23 @@ function AdminView() {
         <div className="media-list">
           {items.map((item, index) => (
             <article className="media-card" key={item.id}>
-              <div className="thumb">
+              <button
+                className="thumb"
+                type="button"
+                onBlur={() => setPreviewItem(null)}
+                onClick={() => setPreviewItem(item)}
+                onFocus={() => setPreviewItem(item)}
+                onMouseEnter={() => setPreviewItem(item)}
+                onMouseLeave={() => setPreviewItem(null)}
+                title="Previsualizar"
+              >
                 {item.kind === 'video' ? (
                   <video src={item.previewUrl} muted playsInline />
                 ) : (
                   <img src={item.previewUrl} alt="" />
                 )}
                 <span>{item.kind === 'video' ? 'Video' : 'Imagen'}</span>
-              </div>
+              </button>
               <div className="media-meta">
                 <strong>{item.name}</strong>
                 <small>
@@ -889,6 +915,32 @@ function AdminView() {
           ))}
         </div>
       </section>
+
+      {previewItem ? (
+        <div className="preview-popover" role="dialog" aria-label="Previsualizacion de contenido">
+          <button className="preview-backdrop" type="button" onClick={() => setPreviewItem(null)} aria-label="Cerrar" />
+          <div className="preview-frame">
+            <div className="preview-media">
+              {previewItem.kind === 'video' ? (
+                <video src={previewItem.previewUrl} muted playsInline controls />
+              ) : (
+                <img src={previewItem.previewUrl} alt="" />
+              )}
+            </div>
+            <div className="preview-meta">
+              <div>
+                <strong>{previewItem.name}</strong>
+                <span>
+                  {previewItem.kind === 'video' ? 'Video' : 'Imagen'} - {previewItem.source === 'remote' ? 'Remoto' : 'Local'}
+                </span>
+              </div>
+              <button className="icon-button" type="button" onClick={() => setPreviewItem(null)} title="Cerrar">
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   )
 }
