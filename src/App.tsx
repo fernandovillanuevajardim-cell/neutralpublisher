@@ -290,7 +290,8 @@ function AdminView() {
   const [cloudEmail, setCloudEmail] = useState('')
   const [cloudPassword, setCloudPassword] = useState('')
   const [cloudUserEmail, setCloudUserEmail] = useState('')
-  const [previewItem, setPreviewItem] = useState<MediaItemWithPreview | null>(null)
+  const [hoverPreviewItem, setHoverPreviewItem] = useState<MediaItemWithPreview | null>(null)
+  const [modalPreviewItem, setModalPreviewItem] = useState<MediaItemWithPreview | null>(null)
   const [pdfFile, setPdfFile] = useState<File | null>(null)
   const [pdfQuality, setPdfQuality] = useState<PdfConvertQuality>(300)
   const [pdfProgress, setPdfProgress] = useState('')
@@ -309,19 +310,19 @@ function AdminView() {
   }, [cloudReady])
 
   useEffect(() => {
-    if (!previewItem) {
+    if (!modalPreviewItem) {
       return
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setPreviewItem(null)
+        setModalPreviewItem(null)
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [previewItem])
+  }, [modalPreviewItem])
 
   const handleFiles = async (files: FileList | null) => {
     if (!files?.length) {
@@ -976,9 +977,11 @@ function AdminView() {
               <button
                 className="thumb"
                 type="button"
-                onClick={() => setPreviewItem(item)}
-                onFocus={() => setPreviewItem(item)}
-                onMouseEnter={() => setPreviewItem(item)}
+                onBlur={() => setHoverPreviewItem(null)}
+                onClick={() => setModalPreviewItem(item)}
+                onFocus={() => setHoverPreviewItem(item)}
+                onMouseEnter={() => setHoverPreviewItem(item)}
+                onMouseLeave={() => setHoverPreviewItem(null)}
                 title="Previsualizar"
               >
                 {item.kind === 'video' ? (
@@ -1021,25 +1024,49 @@ function AdminView() {
         </div>
       </section>
 
-      {previewItem ? (
-        <div className="preview-popover" role="dialog" aria-label="Previsualizacion de contenido">
-          <button className="preview-backdrop" type="button" onClick={() => setPreviewItem(null)} aria-label="Cerrar" />
+      {hoverPreviewItem ? (
+        <div className="preview-popover hover-preview" aria-label="Previsualizacion rapida">
           <div className="preview-frame">
             <div className="preview-media">
-              {previewItem.kind === 'video' ? (
-                <video src={previewItem.previewUrl} muted playsInline controls />
+              {hoverPreviewItem.kind === 'video' ? (
+                <video src={hoverPreviewItem.previewUrl} muted playsInline />
               ) : (
-                <img src={previewItem.previewUrl} alt="" />
+                <img src={hoverPreviewItem.previewUrl} alt="" />
               )}
             </div>
             <div className="preview-meta">
               <div>
-                <strong>{previewItem.name}</strong>
+                <strong>{hoverPreviewItem.name}</strong>
                 <span>
-                  {previewItem.kind === 'video' ? 'Video' : 'Imagen'} - {previewItem.source === 'remote' ? 'Remoto' : 'Local'}
+                  {hoverPreviewItem.kind === 'video' ? 'Video' : 'Imagen'} -{' '}
+                  {hoverPreviewItem.source === 'remote' ? 'Remoto' : 'Local'}
                 </span>
               </div>
-              <button className="icon-button" type="button" onClick={() => setPreviewItem(null)} title="Cerrar">
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {modalPreviewItem ? (
+        <div className="preview-popover" role="dialog" aria-label="Previsualizacion de contenido">
+          <button className="preview-backdrop" type="button" onClick={() => setModalPreviewItem(null)} aria-label="Cerrar" />
+          <div className="preview-frame">
+            <div className="preview-media">
+              {modalPreviewItem.kind === 'video' ? (
+                <video src={modalPreviewItem.previewUrl} muted playsInline controls />
+              ) : (
+                <img src={modalPreviewItem.previewUrl} alt="" />
+              )}
+            </div>
+            <div className="preview-meta">
+              <div>
+                <strong>{modalPreviewItem.name}</strong>
+                <span>
+                  {modalPreviewItem.kind === 'video' ? 'Video' : 'Imagen'} -{' '}
+                  {modalPreviewItem.source === 'remote' ? 'Remoto' : 'Local'}
+                </span>
+              </div>
+              <button className="icon-button" type="button" onClick={() => setModalPreviewItem(null)} title="Cerrar">
                 <X size={18} />
               </button>
             </div>

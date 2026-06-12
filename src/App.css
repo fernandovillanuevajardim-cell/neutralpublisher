@@ -570,6 +570,23 @@ select {
   pointer-events: none;
 }
 
+.hover-preview {
+  padding: 18px;
+  background: transparent;
+}
+
+.hover-preview .preview-frame {
+  width: min(620px, calc(100vw - 36px));
+  max-height: calc(100vh - 36px);
+  pointer-events: none;
+}
+
+.hover-preview .preview-media,
+.hover-preview .preview-media img,
+.hover-preview .preview-media video {
+  max-height: min(58vh, 460px);
+}
+
 .preview-backdrop {
   position: absolute;
   inset: 0;
