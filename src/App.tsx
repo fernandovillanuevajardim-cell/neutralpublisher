@@ -470,11 +470,12 @@ function AdminView() {
           setPdfProgress(`Guardada pagina ${page} de ${total}.`)
         },
       )
+      updateSettings({ ...settings, fitMode: 'contain' })
       await refresh()
       setPdfProgress(
         cloudReady && cloudAuthenticated
-          ? `PDF convertido y subido: ${addedPages} imagenes PNG agregadas. Toca Publicar para actualizar las pantallas.`
-          : `PDF convertido: ${addedPages} imagenes PNG locales agregadas. Inicia sesion y toca Publicar para enviarlas.`,
+          ? `PDF convertido y subido: ${addedPages} imagenes PNG agregadas. Ajuste cambiado a Contener. Toca Publicar.`
+          : `PDF convertido: ${addedPages} imagenes PNG locales agregadas. Ajuste cambiado a Contener. Inicia sesion y publica.`,
       )
     } catch (error) {
       setPdfProgress(error instanceof Error ? error.message : 'No se pudo convertir el PDF.')
