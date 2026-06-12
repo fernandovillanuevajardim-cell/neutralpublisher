@@ -637,55 +637,52 @@ select {
 
 .weather-clock {
   position: absolute;
-  right: 6.5vw;
-  bottom: 5.2vh;
+  right: 26px;
+  bottom: 24px;
   z-index: 3;
-  width: min(46vw, 720px);
-  min-width: 430px;
+  min-width: 230px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 26px;
-  color: #fff8db;
-  background: linear-gradient(180deg, rgba(16, 16, 5, 0.72), rgba(0, 0, 0, 0.7));
-  box-shadow: 0 20px 52px rgba(0, 0, 0, 0.46), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(11px);
-  text-shadow: 0 4px 0 rgba(0, 0, 0, 0.95), 0 0 16px rgba(0, 0, 0, 0.8);
+  border-radius: 8px;
+  color: #ffffff;
+  background: rgba(0, 0, 0, 0.48);
+  backdrop-filter: blur(10px);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
 }
 
 .weather-row {
-  display: grid;
-  grid-template-columns: minmax(130px, 0.62fr) minmax(0, 1fr);
+  display: flex;
   align-items: center;
-  min-height: 150px;
-  padding: 20px 32px 12px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 13px 3px;
 }
 
 .weather-icon {
-  width: clamp(86px, 8vw, 148px);
-  height: clamp(86px, 8vw, 148px);
-  color: #ffe878;
-  filter: drop-shadow(0 7px 0 rgba(0, 0, 0, 0.85)) drop-shadow(0 0 14px rgba(255, 232, 120, 0.25));
+  width: clamp(23px, 1.9vw, 38px);
+  height: clamp(23px, 1.9vw, 38px);
+  flex: 0 0 auto;
+  color: #f8d66d;
+  filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.7));
 }
 
 .weather-temp {
   min-width: 0;
   text-align: right;
-  font-size: clamp(82px, 9vw, 158px);
-  font-weight: 900;
-  line-height: 0.86;
+  font-size: clamp(22px, 1.85vw, 40px);
+  font-weight: 800;
+  line-height: 1;
   letter-spacing: 0;
 }
 
 .weather-meta {
   display: flex;
   justify-content: space-between;
-  gap: 18px;
-  padding: 0 34px 14px;
-  border-bottom: 1px solid rgba(255, 248, 219, 0.14);
-  color: rgba(255, 248, 219, 0.82);
-  font-size: clamp(17px, 1.2vw, 26px);
-  font-weight: 800;
-  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.85);
+  gap: 10px;
+  padding: 0 13px 5px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: clamp(11px, 0.76vw, 16px);
+  font-weight: 700;
+  text-shadow: none;
 }
 
 .weather-meta span {
@@ -696,10 +693,10 @@ select {
 }
 
 .weather-date {
-  padding: 18px 34px 24px;
-  color: #fff8db;
-  font-size: clamp(44px, 4.7vw, 86px);
-  font-weight: 900;
+  padding: 0 13px 9px;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: clamp(17px, 1.35vw, 30px);
+  font-weight: 800;
   line-height: 1;
   text-align: center;
 }
@@ -913,34 +910,35 @@ select {
   .weather-clock {
     right: 14px;
     bottom: 16px;
-    width: calc(100vw - 28px);
+    width: auto;
+    max-width: calc(100vw - 28px);
     min-width: 0;
-    border-radius: 16px;
+    border-radius: 8px;
   }
 
   .weather-row {
-    grid-template-columns: 92px minmax(0, 1fr);
-    min-height: 104px;
-    padding: 14px 18px 8px;
+    gap: 9px;
+    min-height: 0;
+    padding: 8px 11px 3px;
   }
 
   .weather-icon {
-    width: 72px;
-    height: 72px;
+    width: 24px;
+    height: 24px;
   }
 
   .weather-temp {
-    font-size: 72px;
+    font-size: 24px;
   }
 
   .weather-meta {
-    padding: 0 18px 10px;
-    font-size: 15px;
+    padding: 0 11px 4px;
+    font-size: 11px;
   }
 
   .weather-date {
-    padding: 13px 18px 16px;
-    font-size: 36px;
+    padding: 0 11px 8px;
+    font-size: 17px;
   }
 }
 
