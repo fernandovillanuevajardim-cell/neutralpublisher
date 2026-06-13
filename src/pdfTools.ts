@@ -1,4 +1,4 @@
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
+import pdfWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url'
 
 export type PdfConvertQuality = 200 | 300 | 600
 
@@ -36,7 +36,7 @@ export const convertPdfToPngFiles = async (
   onProgress?: (progress: ConvertProgress) => void,
   onPage?: ConvertPage,
 ) => {
-  const pdfjs = await import('pdfjs-dist')
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
   pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
   const data = await file.arrayBuffer()
   const pdf = await pdfjs.getDocument({ data }).promise
