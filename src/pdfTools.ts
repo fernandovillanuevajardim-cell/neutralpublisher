@@ -30,12 +30,34 @@ const makeSafeBaseName = (name: string) =>
     .replace(/^-+|-+$/g, '')
     .toLowerCase() || 'pdf'
 
+const ensurePromiseWithResolvers = () => {
+  const promiseConstructor = Promise as typeof Promise & {
+    withResolvers?: <T>() => {
+      promise: Promise<T>
+      resolve: (value: T | PromiseLike<T>) => void
+      reject: (reason?: unknown) => void
+    }
+  }
+
+  promiseConstructor.withResolvers ??= <T>() => {
+    let resolve!: (value: T | PromiseLike<T>) => void
+    let reject!: (reason?: unknown) => void
+    const promise = new Promise<T>((promiseResolve, promiseReject) => {
+      resolve = promiseResolve
+      reject = promiseReject
+    })
+
+    return { promise, resolve, reject }
+  }
+}
+
 export const convertPdfToPngFiles = async (
   file: File,
   quality: PdfConvertQuality,
   onProgress?: (progress: ConvertProgress) => void,
   onPage?: ConvertPage,
 ) => {
+  ensurePromiseWithResolvers()
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
   pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
   const data = await file.arrayBuffer()
