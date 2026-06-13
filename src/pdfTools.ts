@@ -1,6 +1,6 @@
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
 
-export type PdfConvertQuality = 300 | 600
+export type PdfConvertQuality = 200 | 300 | 600
 
 type ConvertProgress = {
   page: number

@@ -407,6 +407,7 @@ select {
 .pdf-quality {
   min-width: 220px;
   margin: 0;
+  grid-template-columns: repeat(3, 1fr);
 }
 
 .pdf-convert-button {

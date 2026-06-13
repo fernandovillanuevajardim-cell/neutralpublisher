@@ -256,6 +256,23 @@ const makePreviewItems = async (items: MediaItem[]) => {
   return previews.filter(Boolean) as MediaItemWithPreview[]
 }
 
+const preloadImage = (url: string) =>
+  new Promise<void>((resolve, reject) => {
+    const image = new Image()
+
+    image.decoding = 'async'
+    image.onload = () => {
+      if (image.decode) {
+        image.decode().then(() => resolve()).catch(() => resolve())
+        return
+      }
+
+      resolve()
+    }
+    image.onerror = () => reject(new Error('No se pudo precargar la imagen.'))
+    image.src = url
+  })
+
 function usePublisherData() {
   const [items, setItems] = useState<MediaItemWithPreview[]>([])
   const [settings, setSettings] = useState<PublisherSettings>(() => loadSettings())
@@ -308,7 +325,7 @@ function AdminView() {
   const [hoverPreviewItem, setHoverPreviewItem] = useState<MediaItemWithPreview | null>(null)
   const [modalPreviewItem, setModalPreviewItem] = useState<MediaItemWithPreview | null>(null)
   const [pdfFile, setPdfFile] = useState<File | null>(null)
-  const [pdfQuality, setPdfQuality] = useState<PdfConvertQuality>(300)
+  const [pdfQuality, setPdfQuality] = useState<PdfConvertQuality>(200)
   const [pdfProgress, setPdfProgress] = useState('')
   const [isConvertingPdf, setIsConvertingPdf] = useState(false)
   const [shortDisplayUrl, setShortDisplayUrl] = useState('')
@@ -991,6 +1008,9 @@ function AdminView() {
           </label>
 
           <div className="segmented pdf-quality" aria-label="Calidad de PDF">
+            <button className={pdfQuality === 200 ? 'active' : ''} type="button" onClick={() => setPdfQuality(200)}>
+              200 DPI TV
+            </button>
             <button className={pdfQuality === 300 ? 'active' : ''} type="button" onClick={() => setPdfQuality(300)}>
               300 DPI
             </button>
@@ -1011,7 +1031,7 @@ function AdminView() {
         </div>
 
         <p className="pdf-help">
-          300 DPI es recomendado para web y TV. 600 DPI genera mas detalle, pero tarda mas y crea archivos grandes.
+          200 DPI es recomendado para TV con WiFi. 300 DPI da mas detalle. 600 DPI genera archivos muy grandes.
         </p>
         {pdfProgress ? <p className="status-message">{pdfProgress}</p> : null}
       </section>
@@ -1242,6 +1262,7 @@ function DisplayView() {
   const [clock, setClock] = useState(() => new Date())
   const [weather, setWeather] = useState<WeatherSnapshot | null>(null)
   const [playbackMessage, setPlaybackMessage] = useState('')
+  const [readyImageIds, setReadyImageIds] = useState<Set<string>>(() => new Set())
   const kioskMode = getHashKioskMode()
   const organizationId = getHashOrganizationId()
 
@@ -1255,9 +1276,17 @@ function DisplayView() {
       return
     }
 
+    const targetIndex = (safeActiveIndex + 1) % items.length
+    const targetItem = items[targetIndex]
+
+    if (targetItem?.kind === 'image' && !readyImageIds.has(targetItem.id)) {
+      setPlaybackMessage('Cargando contenido...')
+      return
+    }
+
     setPlaybackMessage('')
     setActiveIndex((index) => (index + 1) % items.length)
-  }, [items.length])
+  }, [items, readyImageIds, safeActiveIndex])
 
   useEffect(() => {
     const interval = window.setInterval(() => setClock(new Date()), 1000)
@@ -1305,6 +1334,65 @@ function DisplayView() {
 
     return () => window.clearTimeout(timer)
   }, [activeDuration, activeItem?.kind, activeIndex, goToNextItem, items.length])
+
+  useEffect(() => {
+    if (!items.length) {
+      return
+    }
+
+    let cancelled = false
+    const preloadTargets = [0, 1, 2]
+      .map((offset) => items[(safeActiveIndex + offset) % items.length])
+      .filter((item): item is MediaItemWithPreview => Boolean(item && item.kind === 'image'))
+
+    preloadTargets.forEach((item) => {
+      if (readyImageIds.has(item.id)) {
+        return
+      }
+
+      preloadImage(item.previewUrl)
+        .then(() => {
+          if (cancelled) {
+            return
+          }
+
+          setReadyImageIds((current) => {
+            if (current.has(item.id)) {
+              return current
+            }
+
+            const next = new Set(current)
+            next.add(item.id)
+            return next
+          })
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setPlaybackMessage('Conexion lenta. Reintentando contenido...')
+          }
+        })
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [items, readyImageIds, safeActiveIndex])
+
+  useEffect(() => {
+    if (!items.length || activeItem?.kind === 'video') {
+      return
+    }
+
+    const nextCandidate = items[(safeActiveIndex + 1) % items.length]
+
+    if (playbackMessage === 'Cargando contenido...' && nextCandidate?.kind === 'image' && readyImageIds.has(nextCandidate.id)) {
+      const timer = window.setTimeout(() => {
+        goToNextItem()
+      }, 250)
+
+      return () => window.clearTimeout(timer)
+    }
+  }, [activeItem?.kind, goToNextItem, items, playbackMessage, readyImageIds, safeActiveIndex])
 
   useEffect(() => {
     const sync = async () => {
