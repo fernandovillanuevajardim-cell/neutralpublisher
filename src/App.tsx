@@ -1280,7 +1280,6 @@ function DisplayView() {
     const targetItem = items[targetIndex]
 
     if (targetItem?.kind === 'image' && !readyImageIds.has(targetItem.id)) {
-      setPlaybackMessage('Cargando contenido...')
       return
     }
 
@@ -1368,7 +1367,7 @@ function DisplayView() {
         })
         .catch(() => {
           if (!cancelled) {
-            setPlaybackMessage('Conexion lenta. Reintentando contenido...')
+            setPlaybackMessage('')
           }
         })
     })
@@ -1385,7 +1384,7 @@ function DisplayView() {
 
     const nextCandidate = items[(safeActiveIndex + 1) % items.length]
 
-    if (playbackMessage === 'Cargando contenido...' && nextCandidate?.kind === 'image' && readyImageIds.has(nextCandidate.id)) {
+    if (nextCandidate?.kind === 'image' && readyImageIds.has(nextCandidate.id)) {
       const timer = window.setTimeout(() => {
         goToNextItem()
       }, 250)
