@@ -159,6 +159,16 @@ type WeatherSnapshot = {
   label: string
 }
 
+type GeocodePlace = {
+  latitude: number
+  longitude: number
+  name: string
+  country?: string
+  country_code?: string
+  admin1?: string
+  admin2?: string
+}
+
 const weatherLabels: Record<number, string> = {
   0: 'Despejado',
   1: 'Mayormente claro',
@@ -185,6 +195,111 @@ const weatherLabels: Record<number, string> = {
 
 const getWeatherLabel = (code: number) => weatherLabels[code] ?? 'Clima'
 
+const normalizeWeatherText = (value: string) =>
+  value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+
+const countryHints: Record<string, string> = {
+  argentina: 'AR',
+  uruguay: 'UY',
+  chile: 'CL',
+  paraguay: 'PY',
+  brasil: 'BR',
+  brazil: 'BR',
+  bolivia: 'BO',
+  peru: 'PE',
+  mexico: 'MX',
+  espana: 'ES',
+  spain: 'ES',
+}
+
+const getWeatherSearchQueries = (city: string) => {
+  const cleanCity = city.trim()
+  const withoutCommas = cleanCity.replace(/[,;]+/g, ' ')
+  const words = withoutCommas.split(/\s+/).filter(Boolean)
+  const normalizedWords = words.map(normalizeWeatherText)
+  const wordsWithoutCountry = words.filter((_, index) => !countryHints[normalizedWords[index]])
+  const candidates = [
+    cleanCity,
+    cleanCity.split(',')[0]?.trim(),
+    wordsWithoutCountry.join(' '),
+    wordsWithoutCountry.slice(0, -1).join(' '),
+    wordsWithoutCountry.slice(0, -2).join(' '),
+    wordsWithoutCountry.slice(0, 3).join(' '),
+    wordsWithoutCountry.slice(0, 2).join(' '),
+  ]
+
+  return Array.from(new Set(candidates.map((candidate) => candidate.trim()).filter((candidate) => candidate.length >= 2)))
+}
+
+const scoreWeatherPlace = (place: GeocodePlace, city: string, query: string) => {
+  const haystack = normalizeWeatherText(
+    [place.name, place.country, place.country_code, place.admin1, place.admin2].filter(Boolean).join(' '),
+  )
+  const normalizedCity = normalizeWeatherText(city)
+  const normalizedQuery = normalizeWeatherText(query)
+  const expectedCountry = Object.entries(countryHints).find(([name]) => normalizedCity.includes(name))?.[1]
+  let score = 0
+
+  if (normalizeWeatherText(place.name) === normalizedQuery) {
+    score += 30
+  }
+
+  if (expectedCountry && place.country_code === expectedCountry) {
+    score += 50
+  }
+
+  normalizedCity.split(/\s+/).forEach((word) => {
+    if (word.length >= 3 && haystack.includes(word)) {
+      score += 6
+    }
+  })
+
+  return score
+}
+
+const findWeatherPlace = async (city: string): Promise<GeocodePlace | null> => {
+  const candidates = getWeatherSearchQueries(city)
+  let bestPlace: GeocodePlace | null = null
+  let bestScore = -1
+
+  for (const query of candidates) {
+    const geocodeUrl = new URL('https://geocoding-api.open-meteo.com/v1/search')
+    geocodeUrl.searchParams.set('name', query)
+    geocodeUrl.searchParams.set('count', '10')
+    geocodeUrl.searchParams.set('language', 'es')
+    geocodeUrl.searchParams.set('format', 'json')
+
+    const geocodeResponse = await fetch(geocodeUrl, { cache: 'force-cache' })
+
+    if (!geocodeResponse.ok) {
+      continue
+    }
+
+    const geocode = (await geocodeResponse.json()) as {
+      results?: GeocodePlace[]
+    }
+
+    for (const place of geocode.results ?? []) {
+      const score = scoreWeatherPlace(place, city, query)
+
+      if (score > bestScore) {
+        bestPlace = place
+        bestScore = score
+      }
+    }
+
+    if (bestPlace && bestScore >= 50) {
+      break
+    }
+  }
+
+  return bestPlace
+}
+
 const fetchWeather = async (city: string): Promise<WeatherSnapshot | null> => {
   const cleanCity = city.trim()
 
@@ -192,22 +307,7 @@ const fetchWeather = async (city: string): Promise<WeatherSnapshot | null> => {
     return null
   }
 
-  const geocodeUrl = new URL('https://geocoding-api.open-meteo.com/v1/search')
-  geocodeUrl.searchParams.set('name', cleanCity)
-  geocodeUrl.searchParams.set('count', '1')
-  geocodeUrl.searchParams.set('language', 'es')
-  geocodeUrl.searchParams.set('format', 'json')
-
-  const geocodeResponse = await fetch(geocodeUrl, { cache: 'force-cache' })
-
-  if (!geocodeResponse.ok) {
-    return null
-  }
-
-  const geocode = (await geocodeResponse.json()) as {
-    results?: Array<{ latitude: number; longitude: number; name: string }>
-  }
-  const place = geocode.results?.[0]
+  const place = await findWeatherPlace(cleanCity)
 
   if (!place) {
     return null
@@ -236,7 +336,7 @@ const fetchWeather = async (city: string): Promise<WeatherSnapshot | null> => {
   }
 
   return {
-    city: place.name,
+    city: [place.name, place.admin1].filter(Boolean).join(', '),
     temperature,
     label: getWeatherLabel(code),
   }
