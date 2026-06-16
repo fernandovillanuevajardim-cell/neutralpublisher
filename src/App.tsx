@@ -1492,22 +1492,6 @@ function DisplayView() {
   }, [displayItems, items.length, readyImageIds, safeActiveIndex])
 
   useEffect(() => {
-    if (!items.length || activeItem?.kind === 'video') {
-      return
-    }
-
-    const nextCandidate = displayItems[(safeActiveIndex + 1) % displayItems.length]
-
-    if (nextCandidate?.kind === 'image' && readyImageIds.has(nextCandidate.id)) {
-      const timer = window.setTimeout(() => {
-        goToNextItem()
-      }, 250)
-
-      return () => window.clearTimeout(timer)
-    }
-  }, [activeItem?.kind, displayItems, goToNextItem, items.length, readyImageIds, safeActiveIndex])
-
-  useEffect(() => {
     const sync = async () => {
       const url = getHashPlaylistUrl() || (organizationId ? '' : loadRemotePlaylistUrl())
       const defaultUrl = getDefaultDisplayPlaylistUrl(organizationId || undefined)
