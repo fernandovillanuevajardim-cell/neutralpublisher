@@ -273,6 +273,30 @@ const preloadImage = (url: string) =>
     image.src = url
   })
 
+const mediaCacheName = 'neutralpublisher-media-v1'
+
+const cacheRemoteMedia = async (item: MediaItemWithPreview) => {
+  if (item.source !== 'remote' || !item.url || item.kind !== 'image' || !('caches' in window)) {
+    return item.previewUrl
+  }
+
+  const cache = await caches.open(mediaCacheName)
+  const cached = await cache.match(item.url)
+
+  if (cached) {
+    return URL.createObjectURL(await cached.blob())
+  }
+
+  const response = await fetch(item.url, { cache: 'force-cache' })
+
+  if (!response.ok) {
+    throw new Error('No se pudo cachear el contenido.')
+  }
+
+  await cache.put(item.url, response.clone())
+  return URL.createObjectURL(await response.blob())
+}
+
 function usePublisherData() {
   const [items, setItems] = useState<MediaItemWithPreview[]>([])
   const [settings, setSettings] = useState<PublisherSettings>(() => loadSettings())
@@ -1031,7 +1055,7 @@ function AdminView() {
         </div>
 
         <p className="pdf-help">
-          200 DPI es recomendado para TV con WiFi. 300 DPI da mas detalle. 600 DPI genera archivos muy grandes.
+          200 DPI es recomendado para TV con WiFi. El PDF se sube como imagen WebP/JPG optimizada para reducir trafico.
         </p>
         {pdfProgress ? <p className="status-message">{pdfProgress}</p> : null}
       </section>
@@ -1263,12 +1287,22 @@ function DisplayView() {
   const [weather, setWeather] = useState<WeatherSnapshot | null>(null)
   const [playbackMessage, setPlaybackMessage] = useState('')
   const [readyImageIds, setReadyImageIds] = useState<Set<string>>(() => new Set())
+  const [cachedPreviewUrls, setCachedPreviewUrls] = useState<Record<string, string>>({})
+  const cachedObjectUrls = useRef<string[]>([])
   const kioskMode = getHashKioskMode()
   const organizationId = getHashOrganizationId()
 
   const safeActiveIndex = items.length ? activeIndex % items.length : 0
-  const activeItem = items[safeActiveIndex]
-  const nextItem = items[(safeActiveIndex + 1) % items.length]
+  const displayItems = useMemo(
+    () =>
+      items.map((item) => ({
+        ...item,
+        previewUrl: cachedPreviewUrls[item.id] || item.previewUrl,
+      })),
+    [cachedPreviewUrls, items],
+  )
+  const activeItem = displayItems[safeActiveIndex]
+  const nextItem = displayItems[(safeActiveIndex + 1) % displayItems.length]
   const activeDuration = activeItem?.durationSeconds || settings.slideSeconds
 
   const goToNextItem = useCallback(() => {
@@ -1276,8 +1310,8 @@ function DisplayView() {
       return
     }
 
-    const targetIndex = (safeActiveIndex + 1) % items.length
-    const targetItem = items[targetIndex]
+    const targetIndex = (safeActiveIndex + 1) % displayItems.length
+    const targetItem = displayItems[targetIndex]
 
     if (targetItem?.kind === 'image' && !readyImageIds.has(targetItem.id)) {
       return
@@ -1285,7 +1319,7 @@ function DisplayView() {
 
     setPlaybackMessage('')
     setActiveIndex((index) => (index + 1) % items.length)
-  }, [items, readyImageIds, safeActiveIndex])
+  }, [displayItems, items.length, readyImageIds, safeActiveIndex])
 
   useEffect(() => {
     const interval = window.setInterval(() => setClock(new Date()), 1000)
@@ -1335,13 +1369,55 @@ function DisplayView() {
   }, [activeDuration, activeItem?.kind, activeIndex, goToNextItem, items.length])
 
   useEffect(() => {
+    let cancelled = false
+
+    const warmCache = async () => {
+      const entries: Record<string, string> = {}
+
+      for (const item of items) {
+        if (item.source !== 'remote' || item.kind !== 'image') {
+          continue
+        }
+
+        try {
+          const cachedUrl = await cacheRemoteMedia(item)
+
+          if (cachedUrl !== item.previewUrl) {
+            cachedObjectUrls.current.push(cachedUrl)
+            entries[item.id] = cachedUrl
+          }
+
+          if (!cancelled && Object.keys(entries).length) {
+            setCachedPreviewUrls((current) => ({ ...current, ...entries }))
+          }
+        } catch {
+          // The display keeps using the public URL if local caching fails.
+        }
+      }
+    }
+
+    void warmCache()
+
+    return () => {
+      cancelled = true
+    }
+  }, [items])
+
+  useEffect(() => {
+    return () => {
+      cachedObjectUrls.current.forEach((url) => URL.revokeObjectURL(url))
+      cachedObjectUrls.current = []
+    }
+  }, [])
+
+  useEffect(() => {
     if (!items.length) {
       return
     }
 
     let cancelled = false
     const preloadTargets = [0, 1, 2]
-      .map((offset) => items[(safeActiveIndex + offset) % items.length])
+      .map((offset) => displayItems[(safeActiveIndex + offset) % displayItems.length])
       .filter((item): item is MediaItemWithPreview => Boolean(item && item.kind === 'image'))
 
     preloadTargets.forEach((item) => {
@@ -1375,14 +1451,14 @@ function DisplayView() {
     return () => {
       cancelled = true
     }
-  }, [items, readyImageIds, safeActiveIndex])
+  }, [displayItems, items.length, readyImageIds, safeActiveIndex])
 
   useEffect(() => {
     if (!items.length || activeItem?.kind === 'video') {
       return
     }
 
-    const nextCandidate = items[(safeActiveIndex + 1) % items.length]
+    const nextCandidate = displayItems[(safeActiveIndex + 1) % displayItems.length]
 
     if (nextCandidate?.kind === 'image' && readyImageIds.has(nextCandidate.id)) {
       const timer = window.setTimeout(() => {
@@ -1391,7 +1467,7 @@ function DisplayView() {
 
       return () => window.clearTimeout(timer)
     }
-  }, [activeItem?.kind, goToNextItem, items, playbackMessage, readyImageIds, safeActiveIndex])
+  }, [activeItem?.kind, displayItems, goToNextItem, items.length, readyImageIds, safeActiveIndex])
 
   useEffect(() => {
     const sync = async () => {

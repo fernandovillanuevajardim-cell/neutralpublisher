@@ -9,7 +9,7 @@ type ConvertProgress = {
 
 type ConvertPage = (file: File, progress: ConvertProgress) => Promise<void> | void
 
-const blobFromCanvas = (canvas: HTMLCanvasElement) =>
+const blobFromCanvas = (canvas: HTMLCanvasElement, type = 'image/webp', quality = 0.82) =>
   new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (blob) {
@@ -17,8 +17,20 @@ const blobFromCanvas = (canvas: HTMLCanvasElement) =>
         return
       }
 
-      reject(new Error('No se pudo generar el PNG.'))
-    }, 'image/png')
+      if (type === 'image/webp') {
+        canvas.toBlob((fallbackBlob) => {
+          if (fallbackBlob) {
+            resolve(fallbackBlob)
+            return
+          }
+
+          reject(new Error('No se pudo generar la imagen optimizada.'))
+        }, 'image/jpeg', 0.86)
+        return
+      }
+
+      reject(new Error('No se pudo generar la imagen optimizada.'))
+    }, type, quality)
   })
 
 const makeSafeBaseName = (name: string) =>
@@ -83,16 +95,17 @@ export const convertPdfToPngFiles = async (
     await page.render({ canvas, canvasContext: context, viewport }).promise
 
     const blob = await blobFromCanvas(canvas)
-    const pngFile = new File([blob], `${baseName}-pagina-${String(pageNumber).padStart(2, '0')}-${quality}dpi.png`, {
-      type: 'image/png',
+    const extension = blob.type === 'image/webp' ? 'webp' : 'jpg'
+    const imageFile = new File([blob], `${baseName}-pagina-${String(pageNumber).padStart(2, '0')}-${quality}dpi.${extension}`, {
+      type: blob.type,
       lastModified: Date.now(),
     })
     const progress = { page: pageNumber, total: pdf.numPages }
 
     if (onPage) {
-      await onPage(pngFile, progress)
+      await onPage(imageFile, progress)
     } else {
-      files.push(pngFile)
+      files.push(imageFile)
     }
 
     canvas.width = 1
