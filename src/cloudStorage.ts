@@ -227,6 +227,51 @@ export const uploadMediaToCloud = async (media: UploadableMedia, organizationId?
   }
 }
 
+const getStoragePathFromPublicUrl = (url: string) => {
+  if (!supabaseUrl) {
+    return null
+  }
+
+  try {
+    const parsedUrl = new URL(url)
+    const parsedSupabaseUrl = new URL(supabaseUrl)
+
+    if (parsedUrl.origin !== parsedSupabaseUrl.origin) {
+      return null
+    }
+
+    const marker = `/storage/v1/object/public/${bucket}/`
+    const markerIndex = parsedUrl.pathname.indexOf(marker)
+
+    if (markerIndex === -1) {
+      return null
+    }
+
+    const path = decodeURIComponent(parsedUrl.pathname.slice(markerIndex + marker.length))
+    return path || null
+  } catch {
+    return null
+  }
+}
+
+export const deleteCloudMediaByUrl = async (url: string) => {
+  const storagePath = getStoragePathFromPublicUrl(url)
+
+  if (!storagePath) {
+    return false
+  }
+
+  const supabase = getSupabase()
+  await requireCloudUser()
+  const { error } = await supabase.storage.from(bucket).remove([storagePath])
+
+  if (error) {
+    throw new Error(`No se pudo borrar el archivo remoto: ${error.message}`)
+  }
+
+  return true
+}
+
 export const publishJsonToCloud = async (name: string, content: unknown) => {
   const supabase = getSupabase()
   const user = await requireCloudUser()

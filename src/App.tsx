@@ -51,6 +51,7 @@ import {
 } from './storage'
 import {
   createOrganization,
+  deleteCloudMediaByUrl,
   getChannelPlaylistUrl,
   getCloudUser,
   isCloudStorageConfigured,
@@ -539,15 +540,57 @@ function AdminView() {
     saveOrder(nextItems.map((nextItem) => nextItem.id))
   }
 
+  const deleteRemoteFileIfPossible = async (item: MediaItem) => {
+    if (item.source !== 'remote' || !item.url || !cloudReady || !cloudAuthenticated) {
+      return false
+    }
+
+    return deleteCloudMediaByUrl(item.url)
+  }
+
   const removeItem = async (id: string) => {
+    const item = items.find((nextItem) => nextItem.id === id)
+
+    if (item) {
+      try {
+        await deleteRemoteFileIfPossible(item)
+      } catch (error) {
+        setStatusMessage(error instanceof Error ? error.message : 'No se pudo borrar el archivo remoto.')
+      }
+    }
+
     await deleteMedia(id)
     await refresh()
   }
 
   const clearItems = async () => {
+    let deletedRemote = 0
+    let failedRemote = 0
+
+    if (cloudReady && cloudAuthenticated) {
+      for (const item of items) {
+        try {
+          const wasDeleted = await deleteRemoteFileIfPossible(item)
+
+          if (wasDeleted) {
+            deletedRemote += 1
+          }
+        } catch {
+          failedRemote += 1
+        }
+      }
+    }
+
     await deleteAllMedia()
     await refresh()
-    setStatusMessage('Lista local limpiada. Toca Publicar para actualizar las pantallas.')
+
+    if (!cloudAuthenticated) {
+      setStatusMessage('Lista local limpiada. Inicia sesion para borrar archivos remotos y publica para actualizar pantallas.')
+      return
+    }
+
+    const suffix = failedRemote ? ` ${failedRemote} archivos remotos no se pudieron borrar.` : ''
+    setStatusMessage(`Lista limpiada. Archivos remotos borrados: ${deletedRemote}.${suffix} Toca Publicar para vaciar las pantallas.`)
   }
 
   const updateItemDuration = async (item: MediaItemWithPreview, value: string) => {
@@ -646,11 +689,6 @@ function AdminView() {
       }
 
       const playlist = await exportRemotePlaylist()
-
-      if (!playlist.items.length) {
-        setStatusMessage('No hay contenido remoto para publicar. Carga imagenes o videos y vuelve a publicar.')
-        return
-      }
 
       await publishJsonToCloud('neutralpublisher-playlist', playlist)
       const channelUrl = await publishChannelPlaylistToCloud(playlist, 'principal', selectedOrganizationId || undefined)
