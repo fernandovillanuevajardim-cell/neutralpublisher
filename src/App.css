@@ -925,12 +925,12 @@ select {
 }
 
 .weather-date {
-  padding: 0 13px 9px;
-  color: rgba(255, 255, 255, 0.92);
-  font-size: clamp(17px, 1.35vw, 30px);
+  padding: 0 10px 7px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: clamp(13px, 0.86vw, 18px);
   font-weight: 800;
   line-height: 1;
-  text-align: center;
+  text-align: right;
 }
 
 .brand-badge {
@@ -1191,8 +1191,8 @@ select {
   }
 
   .weather-date {
-    padding: 0 11px 8px;
-    font-size: 17px;
+    padding: 0 9px 7px;
+    font-size: 13px;
   }
 }
 

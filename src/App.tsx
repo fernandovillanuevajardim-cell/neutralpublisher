@@ -1626,6 +1626,14 @@ function DisplayView() {
       }).format(clock),
     [clock],
   )
+  const formattedWeatherTime = useMemo(
+    () =>
+      new Intl.DateTimeFormat('es-AR', {
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(clock),
+    [clock],
+  )
   const requestFullscreen = () => {
     if (!document.fullscreenElement) {
       void document.documentElement.requestFullscreen?.()
@@ -1705,6 +1713,7 @@ function DisplayView() {
             <span>{weather?.city || settings.weatherCity || 'Clima'}</span>
             <span>{weather?.label || 'Actualizando'}</span>
           </div>
+          {settings.showClock ? <div className="weather-date">{formattedWeatherTime}</div> : null}
         </aside>
       ) : settings.showClock ? (
         <div className="clock">{formattedClock}</div>
