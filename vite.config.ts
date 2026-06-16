@@ -11,7 +11,15 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: 'auto',
       includeAssets: ['favicon.svg', 'neutralpublisher-icon.svg'],
+      workbox: {
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
+        navigateFallback: `${basePath}index.html`,
+        skipWaiting: true,
+      },
       manifest: {
         name: 'NeutralPublisher',
         short_name: 'NeutralPublisher',
@@ -30,10 +38,6 @@ export default defineConfig({
             purpose: 'any maskable',
           },
         ],
-      },
-      workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest}'],
-        navigateFallback: `${basePath}index.html`,
       },
     }),
   ],
