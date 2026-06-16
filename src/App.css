@@ -871,11 +871,12 @@ select {
   right: 26px;
   bottom: 24px;
   z-index: 3;
-  min-width: 230px;
+  min-width: 150px;
+  max-width: min(230px, calc(100vw - 52px));
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: 6px;
   color: #ffffff;
-  background: rgba(0, 0, 0, 0.48);
+  background: rgba(0, 0, 0, 0.42);
   backdrop-filter: blur(10px);
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
 }
@@ -884,13 +885,13 @@ select {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 9px 13px 3px;
+  gap: 9px;
+  padding: 7px 10px 2px;
 }
 
 .weather-icon {
-  width: clamp(23px, 1.9vw, 38px);
-  height: clamp(23px, 1.9vw, 38px);
+  width: clamp(18px, 1.45vw, 30px);
+  height: clamp(18px, 1.45vw, 30px);
   flex: 0 0 auto;
   color: #f8d66d;
   filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.7));
@@ -899,7 +900,7 @@ select {
 .weather-temp {
   min-width: 0;
   text-align: right;
-  font-size: clamp(22px, 1.85vw, 40px);
+  font-size: clamp(18px, 1.48vw, 32px);
   font-weight: 800;
   line-height: 1;
   letter-spacing: 0;
@@ -908,10 +909,10 @@ select {
 .weather-meta {
   display: flex;
   justify-content: space-between;
-  gap: 10px;
-  padding: 0 13px 5px;
+  gap: 7px;
+  padding: 0 10px 7px;
   color: rgba(255, 255, 255, 0.78);
-  font-size: clamp(11px, 0.76vw, 16px);
+  font-size: clamp(10px, 0.66vw, 13px);
   font-weight: 700;
   text-shadow: none;
 }
@@ -1170,23 +1171,23 @@ select {
   }
 
   .weather-row {
-    gap: 9px;
+    gap: 7px;
     min-height: 0;
-    padding: 8px 11px 3px;
+    padding: 6px 9px 2px;
   }
 
   .weather-icon {
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
   }
 
   .weather-temp {
-    font-size: 24px;
+    font-size: 21px;
   }
 
   .weather-meta {
-    padding: 0 11px 4px;
-    font-size: 11px;
+    padding: 0 9px 6px;
+    font-size: 10px;
   }
 
   .weather-date {

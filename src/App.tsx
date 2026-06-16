@@ -336,7 +336,7 @@ const fetchWeather = async (city: string): Promise<WeatherSnapshot | null> => {
   }
 
   return {
-    city: [place.name, place.admin1].filter(Boolean).join(', '),
+    city: place.name,
     temperature,
     label: getWeatherLabel(code),
   }
@@ -1626,17 +1626,6 @@ function DisplayView() {
       }).format(clock),
     [clock],
   )
-  const formattedWidgetDate = useMemo(
-    () =>
-      new Intl.DateTimeFormat('es-AR', {
-        day: 'numeric',
-        month: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      }).format(clock),
-    [clock],
-  )
-
   const requestFullscreen = () => {
     if (!document.fullscreenElement) {
       void document.documentElement.requestFullscreen?.()
@@ -1716,7 +1705,6 @@ function DisplayView() {
             <span>{weather?.city || settings.weatherCity || 'Clima'}</span>
             <span>{weather?.label || 'Actualizando'}</span>
           </div>
-          {settings.showClock ? <div className="weather-date">{formattedWidgetDate}</div> : null}
         </aside>
       ) : settings.showClock ? (
         <div className="clock">{formattedClock}</div>
