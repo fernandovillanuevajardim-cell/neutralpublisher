@@ -351,6 +351,24 @@ select {
   min-height: auto;
 }
 
+.settings-save {
+  display: grid;
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.settings-save .icon-button {
+  justify-content: center;
+  width: 100%;
+}
+
+.settings-save p {
+  margin: 0;
+  color: #657783;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
 .library {
   max-width: 1240px;
   margin: 18px auto 0;

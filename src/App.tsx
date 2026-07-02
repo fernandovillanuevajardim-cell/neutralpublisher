@@ -19,6 +19,7 @@ import {
   Plus,
   QrCode,
   RefreshCw,
+  Save,
   Settings,
   Sparkles,
   Trash2,
@@ -1167,6 +1168,20 @@ function AdminView() {
             />
             <span>Marca discreta</span>
           </label>
+
+          <div className="settings-save">
+            <button
+              className="icon-button labeled primary-action"
+              type="button"
+              disabled={!cloudReady || !cloudAuthenticated}
+              onClick={() => void publishPlaylist()}
+              title="Guardar ajustes y actualizar el visor"
+            >
+              <Save size={18} />
+              <span>Guardar en visor</span>
+            </button>
+            <p>Aplica clima, hora, duracion, transicion y ajuste de imagen en las pantallas.</p>
+          </div>
         </div>
       </section>
 
