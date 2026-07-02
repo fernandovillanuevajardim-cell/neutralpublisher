@@ -480,6 +480,20 @@ function AdminView() {
       const nextOrganizations = await listOrganizations()
       setOrganizations(nextOrganizations)
 
+      const hasSelectedOrganization = nextOrganizations.some((organization) => organization.id === selectedOrganizationId)
+
+      if (selectedOrganizationId && !hasSelectedOrganization) {
+        const fallbackOrganizationId = nextOrganizations[0]?.id ?? ''
+        setSelectedOrganizationId(fallbackOrganizationId)
+        saveOrganizationId(fallbackOrganizationId)
+        setOrganizationMessage(
+          fallbackOrganizationId
+            ? 'Se cambio a una organizacion valida del Supabase nuevo.'
+            : 'Se limpio una organizacion vieja. Crea una nueva empresa antes de publicar por empresa.',
+        )
+        return
+      }
+
       if (!selectedOrganizationId && nextOrganizations[0]) {
         setSelectedOrganizationId(nextOrganizations[0].id)
         saveOrganizationId(nextOrganizations[0].id)

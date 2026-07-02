@@ -107,6 +107,11 @@ export const saveKioskMode = (enabled: boolean) => {
 export const loadOrganizationId = () => localStorage.getItem(organizationIdKey) ?? ''
 
 export const saveOrganizationId = (id: string) => {
+  if (!id) {
+    localStorage.removeItem(organizationIdKey)
+    return
+  }
+
   localStorage.setItem(organizationIdKey, id)
 }
 
