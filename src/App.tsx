@@ -58,7 +58,6 @@ import {
   isCloudStorageConfigured,
   listOrganizations,
   publishChannelPlaylistToCloud,
-  publishJsonToCloud,
   signInCloudUser,
   signOutCloudUser,
   uploadFilesToCloud,
@@ -805,7 +804,6 @@ function AdminView() {
 
       const playlist = await exportRemotePlaylist()
 
-      await publishJsonToCloud('neutralpublisher-playlist', playlist)
       const channelUrl = await publishChannelPlaylistToCloud(playlist, 'principal', selectedOrganizationId || undefined)
 
       setPlaylistUrl(channelUrl)
@@ -1641,7 +1639,7 @@ function DisplayView() {
 
     void sync()
 
-    const interval = window.setInterval(() => void sync(), 60_000)
+    const interval = window.setInterval(() => void sync(), 5 * 60_000)
     return () => window.clearInterval(interval)
   }, [organizationId, refresh])
 
