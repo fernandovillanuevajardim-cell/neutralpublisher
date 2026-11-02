@@ -28,6 +28,8 @@ import {
 import { QRCodeSVG } from 'qrcode.react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
+import { DisplayAccess } from './DisplayAccess'
+import { ScreenManager } from './ScreenManager'
 import {
   addFiles,
   addRemoteMedia,
@@ -357,12 +359,22 @@ const makePreviewItems = async (items: MediaItem[]) => {
   return previews.filter(Boolean) as MediaItemWithPreview[]
 }
 
-const preloadImage = (url: string) =>
+const preloadImage = (url: string, signal: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
     const image = new Image()
-
+    const cleanup = () => signal.removeEventListener('abort', abort)
+    const abort = () => {
+      image.onload = null
+      image.onerror = null
+      image.src = ''
+      cleanup()
+      reject(new DOMException('Aborted', 'AbortError'))
+    }
+    if (signal.aborted) { abort(); return }
+    signal.addEventListener('abort', abort, { once: true })
     image.decoding = 'async'
     image.onload = () => {
+      cleanup()
       if (image.decode) {
         image.decode().then(() => resolve()).catch(() => resolve())
         return
@@ -370,13 +382,13 @@ const preloadImage = (url: string) =>
 
       resolve()
     }
-    image.onerror = () => reject(new Error('No se pudo precargar la imagen.'))
+    image.onerror = () => { cleanup(); reject(new Error('No se pudo precargar la imagen.')) }
     image.src = url
   })
 
 const mediaCacheName = 'neutralpublisher-media-v1'
 
-const cacheRemoteMedia = async (item: MediaItemWithPreview) => {
+const cacheRemoteMedia = async (item: MediaItemWithPreview, signal?: AbortSignal) => {
   if (item.source !== 'remote' || !item.url || item.kind !== 'image' || !('caches' in window)) {
     return item.previewUrl
   }
@@ -388,7 +400,7 @@ const cacheRemoteMedia = async (item: MediaItemWithPreview) => {
     return URL.createObjectURL(await cached.blob())
   }
 
-  const response = await fetch(item.url, { cache: 'force-cache' })
+  const response = await fetch(item.url, { cache: 'force-cache', signal })
 
   if (!response.ok) {
     throw new Error('No se pudo cachear el contenido.')
@@ -398,7 +410,7 @@ const cacheRemoteMedia = async (item: MediaItemWithPreview) => {
   return URL.createObjectURL(await response.blob())
 }
 
-function usePublisherData() {
+function usePublisherData(initialLoad = true) {
   const [items, setItems] = useState<MediaItemWithPreview[]>([])
   const [settings, setSettings] = useState<PublisherSettings>(() => loadSettings())
   const objectUrls = useRef<string[]>([])
@@ -419,12 +431,12 @@ function usePublisherData() {
   useEffect(() => {
     // IndexedDB is browser-only, so persisted media is loaded after mount.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void refresh()
+    if (initialLoad) void refresh()
 
     return () => {
       objectUrls.current.forEach((url) => URL.revokeObjectURL(url))
     }
-  }, [refresh])
+  }, [initialLoad, refresh])
 
   const updateSettings = (nextSettings: PublisherSettings) => {
     setSettings(nextSettings)
@@ -987,6 +999,8 @@ function AdminView() {
         {organizationMessage ? <p className="status-message">{organizationMessage}</p> : null}
       </section>
 
+      <ScreenManager key={`${selectedOrganizationId}:${cloudAuthenticated}`} organizationId={selectedOrganizationId} authenticated={cloudAuthenticated} />
+
       <section className="admin-grid">
         <div className="panel upload-panel">
           <div className="panel-heading">
@@ -1446,7 +1460,7 @@ function AdminView() {
 }
 
 function DisplayView() {
-  const { items, settings, refresh } = usePublisherData()
+  const { items, settings, refresh } = usePublisherData(!getHashOrganizationId())
   const [activeIndex, setActiveIndex] = useState(0)
   const [clock, setClock] = useState(() => new Date())
   const [weather, setWeather] = useState<WeatherSnapshot | null>(null)
@@ -1540,12 +1554,17 @@ function DisplayView() {
       const entries: Record<string, string> = {}
 
       for (const item of items) {
+        if (cancelled) break
         if (item.source !== 'remote' || item.kind !== 'image') {
           continue
         }
 
         try {
-          const cachedUrl = await cacheRemoteMedia(item)
+          const cachedUrl = await cacheRemoteMedia(item, controller.signal)
+          if (cancelled) {
+            if (cachedUrl.startsWith('blob:')) URL.revokeObjectURL(cachedUrl)
+            break
+          }
 
           if (cachedUrl !== item.previewUrl) {
             cachedObjectUrls.current.push(cachedUrl)
@@ -1561,10 +1580,12 @@ function DisplayView() {
       }
     }
 
+    const controller = new AbortController()
     void warmCache()
 
     return () => {
       cancelled = true
+      controller.abort()
     }
   }, [items])
 
@@ -1584,13 +1605,14 @@ function DisplayView() {
     const preloadTargets = [0, 1, 2]
       .map((offset) => displayItems[(safeActiveIndex + offset) % displayItems.length])
       .filter((item): item is MediaItemWithPreview => Boolean(item && item.kind === 'image'))
+    const controller = new AbortController()
 
     preloadTargets.forEach((item) => {
       if (readyImageIds.has(item.id)) {
         return
       }
 
-      preloadImage(item.previewUrl)
+      preloadImage(item.previewUrl, controller.signal)
         .then(() => {
           if (cancelled) {
             return
@@ -1615,32 +1637,44 @@ function DisplayView() {
 
     return () => {
       cancelled = true
+      controller.abort()
     }
   }, [displayItems, items.length, readyImageIds, safeActiveIndex])
 
   useEffect(() => {
+    const controller = new AbortController()
+    let running = false
     const sync = async () => {
-      const url = getHashPlaylistUrl() || (organizationId ? '' : loadRemotePlaylistUrl())
-      const defaultUrl = getDefaultDisplayPlaylistUrl(organizationId || undefined)
-      const syncUrl = url || defaultUrl
+      if (running || controller.signal.aborted) return
+      running = true
+      try {
+        const url = getHashPlaylistUrl() || (organizationId ? '' : loadRemotePlaylistUrl())
+        const defaultUrl = getDefaultDisplayPlaylistUrl(organizationId || undefined)
+        const syncUrl = url || defaultUrl
 
-      if (syncUrl) {
-        try {
-          const playlist = await fetchRemotePlaylist(syncUrl)
-          await replaceWithRemotePlaylist(playlist)
-        } catch {
-          // The player keeps showing the last cached playlist when sync fails.
+        if (syncUrl) {
+          try {
+            const playlist = await fetchRemotePlaylist(syncUrl, controller.signal)
+            if (controller.signal.aborted) return
+            await replaceWithRemotePlaylist(playlist)
+          } catch {
+            // Mounted players retain their current images; never load another organization's local list.
+            if (organizationId) return
+          }
         }
-      }
 
-      await refresh()
-      setPlaybackMessage('')
+        if (controller.signal.aborted) return
+        await refresh()
+        setPlaybackMessage('')
+      } finally {
+        running = false
+      }
     }
 
     void sync()
 
     const interval = window.setInterval(() => void sync(), 5 * 60_000)
-    return () => window.clearInterval(interval)
+    return () => { controller.abort(); window.clearInterval(interval) }
   }, [organizationId, refresh])
 
   const formattedClock = useMemo(
@@ -1792,16 +1826,17 @@ function HomeView() {
 }
 
 function App() {
-  const [route, setRoute] = useState(() => getHashRoute())
+  const [hash, setHash] = useState(() => window.location.hash)
+  const route = getHashRoute()
 
   useEffect(() => {
-    const handleHashChange = () => setRoute(getHashRoute())
+    const handleHashChange = () => setHash(window.location.hash)
     window.addEventListener('hashchange', handleHashChange)
     return () => window.removeEventListener('hashchange', handleHashChange)
   }, [])
 
   if (route === '/display') {
-    return <DisplayView />
+    return <DisplayAccess key={hash} organizationId={getHashOrganizationId()}><DisplayView /></DisplayAccess>
   }
 
   if (route === '/admin') {

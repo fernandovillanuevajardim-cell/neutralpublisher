@@ -1,0 +1,51 @@
+import { getSupabase } from './cloudStorage'
+import { createId } from './id'
+
+export const HEARTBEAT_MS = 5 * 60_000
+export const RECENT_MS = 11 * 60_000
+export type DeviceState = 'pending' | 'enabled' | 'disabled'
+export type DisplayDevice = {
+  id: string
+  organization_id: string
+  name: string
+  enabled: boolean | null
+  last_seen_at: string
+}
+export type DeviceIdentity = { id: string; secret: string }
+
+export function getDeviceIdentity(organizationId: string): DeviceIdentity {
+  const key = `neutralpublisher-device-v1:${organizationId}`
+  const saved = localStorage.getItem(key)
+  if (saved) {
+    const identity = JSON.parse(saved) as DeviceIdentity
+    if (/^[a-f0-9-]{36}$/.test(identity.id) && /^[a-f0-9]{64}$/.test(identity.secret)) return identity
+    throw new Error('Identidad de pantalla invalida.')
+  }
+  const bytes = crypto.getRandomValues(new Uint8Array(32))
+  const identity = { id: createId(), secret: Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('') }
+  localStorage.setItem(key, JSON.stringify(identity))
+  return identity
+}
+
+export async function heartbeat(organizationId: string, identity: DeviceIdentity, signal: AbortSignal): Promise<DeviceState> {
+  const { data, error } = await getSupabase().rpc('display_heartbeat', {
+    org_id: organizationId, device_id: identity.id, device_secret: identity.secret,
+  }).abortSignal(signal)
+  if (error) throw new Error(error.message)
+  if (data !== 'enabled' && data !== 'disabled' && data !== 'pending') throw new Error('Respuesta de pantalla invalida.')
+  return data
+}
+
+export async function listDisplayDevices(organizationId: string) {
+  const { data, error } = await getSupabase().from('display_devices')
+    .select('id, organization_id, name, enabled, last_seen_at')
+    .eq('organization_id', organizationId).order('created_at')
+  if (error) throw new Error(`No se pudieron consultar las pantallas: ${error.message}`)
+  return data as DisplayDevice[]
+}
+
+export async function updateDisplayDevice(id: string, organizationId: string, changes: { name?: string; enabled?: boolean }) {
+  const { data, error } = await getSupabase().from('display_devices').update(changes)
+    .eq('id', id).eq('organization_id', organizationId).select('id').single()
+  if (error || !data) throw new Error(error?.message || 'No tienes permisos para administrar esta pantalla.')
+}

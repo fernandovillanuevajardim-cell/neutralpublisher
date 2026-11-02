@@ -64,8 +64,8 @@ export const parseRemotePlaylist = (value: unknown): RemotePlaylist => {
   }
 }
 
-export const fetchRemotePlaylist = async (url: string) => {
-  const response = await fetch(url, { cache: 'no-store' })
+export const fetchRemotePlaylist = async (url: string, signal?: AbortSignal) => {
+  const response = await fetch(url, { cache: 'no-store', signal })
 
   if (!response.ok) {
     throw new Error(`No se pudo cargar la playlist remota (${response.status}).`)

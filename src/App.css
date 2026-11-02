@@ -5,6 +5,44 @@
   background: #f6f7f9;
 }
 
+.screen-manager {
+  max-width: 1240px;
+  margin: 24px auto;
+  padding-block: 18px;
+  border-block: 1px solid #dce3e8;
+}
+
+.screen-manager h2 { font-size: 19px; margin: 0; }
+.screen-list { padding: 0; margin: 0; list-style: none; }
+.screen-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) 150px;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 0;
+  border-top: 1px solid #dce3e8;
+}
+.screen-name { display: flex; gap: 8px; min-width: 0; }
+.screen-name input { width: 100%; min-width: 0; }
+.screen-status { display: grid; gap: 4px; overflow-wrap: anywhere; }
+.screen-status small { color: #42606f; }
+.display-access {
+  min-height: 100dvh;
+  background: #050708;
+  color: #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 24px;
+  text-align: center;
+}
+.display-access h1 { font-size: 24px; max-width: 600px; }
+@media (max-width: 700px) {
+  .screen-row { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .screen-row > button { justify-self: start; }
+}
+
 .home-shell {
   display: grid;
   min-height: 100vh;

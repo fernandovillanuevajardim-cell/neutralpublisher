@@ -32,7 +32,7 @@ let supabaseClient: SupabaseClient | undefined
 
 export const isCloudStorageConfigured = () => Boolean(cloudUploadEnabled && supabaseUrl && supabaseAnonKey)
 
-const getSupabase = () => {
+export const getSupabase = () => {
   if (!isCloudStorageConfigured()) {
     throw new Error('La subida cloud no esta configurada o no esta habilitada.')
   }
