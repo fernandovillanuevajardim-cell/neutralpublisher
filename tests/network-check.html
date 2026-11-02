@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prueba de conexiones NeutralPublisher</title>
+<body>
+  <h1>Prueba de conexiones</h1>
+  <form id="playlist-form">
+    <label>Playlist JSON <input id="playlist-url" type="url" required size="70"></label>
+    <button>Comprobar playlist sin descargar imagenes</button>
+    <p id="playlist-result" role="status"></p>
+  </form>
+  <form id="short-form">
+    <label>Enlace del visor <input id="display-url" type="url" required size="70"></label>
+    <button>Comprobar enlace corto</button>
+    <p id="short-result" role="status"></p>
+  </form>
+  <script type="module">
+    import { fetchRemotePlaylist } from '../src/playlist.ts'
+    import { shortenDisplayLink } from '../src/shortLinks.ts'
+    document.querySelector('#playlist-form').addEventListener('submit', async (event) => {
+      event.preventDefault()
+      const result = document.querySelector('#playlist-result')
+      result.textContent = 'Comprobando...'
+      try {
+        const playlist = await fetchRemotePlaylist(document.querySelector('#playlist-url').value)
+        result.textContent = `Correcto: ${playlist.items.length} contenidos; solo JSON descargado.`
+      } catch (error) { result.textContent = error.message }
+    })
+    document.querySelector('#short-form').addEventListener('submit', async (event) => {
+      event.preventDefault()
+      const result = document.querySelector('#short-result')
+      result.textContent = 'Comprobando...'
+      try { result.textContent = await shortenDisplayLink(document.querySelector('#display-url').value) }
+      catch (error) { result.textContent = error.message }
+    })
+  </script>
+</body>
+</html>

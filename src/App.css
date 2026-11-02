@@ -483,7 +483,7 @@ select {
 
 .sync-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(5, auto);
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 10px;
   align-items: center;
 }
@@ -491,6 +491,9 @@ select {
 .sync-grid input {
   width: 100%;
 }
+
+.sync-grid > input { grid-column: 1 / -1; }
+.sync-grid .icon-button { min-width: 0; white-space: normal; }
 
 .import-button {
   position: relative;
@@ -1254,6 +1257,6 @@ select {
 
 @media (min-width: 821px) and (max-width: 1120px) {
   .sync-grid {
-    grid-template-columns: minmax(0, 1fr) repeat(2, auto);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

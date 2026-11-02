@@ -6,6 +6,7 @@ import {
   type RemotePlaylistItem,
 } from './types'
 import { createId } from './id'
+import { reconcilePlaylistItems, samePlaylistItems } from './playlistItems'
 
 const databaseName = 'neutral-publisher'
 const databaseVersion = 1
@@ -234,28 +235,26 @@ export const replaceWithRemotePlaylist = async (playlist: RemotePlaylist) => {
   const media = transaction.objectStore(mediaStore)
   const blobs = transaction.objectStore(blobStore)
   const previousItems = await requestToPromise<MediaItem[]>(media.getAll())
-  const created: MediaItem[] = []
+  const rank = new Map(loadOrder().map((id, index) => [id, index]))
+  const orderedItems = [...previousItems].sort((a, b) =>
+    (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER) || a.createdAt - b.createdAt)
+  const created = reconcilePlaylistItems(previousItems, playlist.items)
+  const mediaChanged = !samePlaylistItems(orderedItems, created)
+  const settingsChanged = JSON.stringify(loadSettings()) !== JSON.stringify(playlist.settings)
+
+  if (!mediaChanged) {
+    database.close()
+    if (settingsChanged) saveSettings(playlist.settings)
+    return settingsChanged
+  }
 
   previousItems.forEach((item) => {
     media.delete(item.id)
     blobs.delete(item.id)
   })
 
-  playlist.items.forEach((playlistItem) => {
-    const item: MediaItem = {
-      id: createId(),
-      name: playlistItem.name,
-      kind: playlistItem.kind,
-      source: 'remote',
-      url: playlistItem.url,
-      mimeType: playlistItem.mimeType || (playlistItem.kind === 'video' ? 'video/mp4' : 'image/*'),
-      size: 0,
-      durationSeconds: playlistItem.durationSeconds,
-      createdAt: Date.now(),
-    }
-
+  created.forEach((item) => {
     media.put(item)
-    created.push(item)
   })
 
   await new Promise<void>((resolve, reject) => {
@@ -266,6 +265,7 @@ export const replaceWithRemotePlaylist = async (playlist: RemotePlaylist) => {
   database.close()
   saveSettings(playlist.settings)
   saveOrder(created.map((item) => item.id))
+  return true
 }
 
 export const exportRemotePlaylist = async (name = 'NeutralPublisher Playlist'): Promise<RemotePlaylist> => {

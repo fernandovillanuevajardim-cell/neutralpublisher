@@ -1,4 +1,5 @@
 import { defaultSettings, type MediaKind, type RemotePlaylist, type TransitionName } from './types'
+import { parseHttpUrl, requestJson, RequestError } from './network'
 
 const transitions: TransitionName[] = ['fade', 'slide-x', 'slide-y', 'zoom', 'flip', 'blur']
 const mediaKinds: MediaKind[] = ['image', 'video']
@@ -65,11 +66,21 @@ export const parseRemotePlaylist = (value: unknown): RemotePlaylist => {
 }
 
 export const fetchRemotePlaylist = async (url: string, signal?: AbortSignal) => {
-  const response = await fetch(url, { cache: 'no-store', signal })
-
-  if (!response.ok) {
-    throw new Error(`No se pudo cargar la playlist remota (${response.status}).`)
+  const normalizedUrl = parseHttpUrl(url).href
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return parseRemotePlaylist(await requestJson(normalizedUrl, signal))
+    } catch (error) {
+      // One retry for interrupted connections only; never retry permissions or malformed content.
+      if (attempt === 0 && error instanceof RequestError && error.kind === 'network') continue
+      if (error instanceof RequestError && error.status === 404) {
+        throw new Error('No se encontro la playlist. Revisa el enlace o publica primero el canal de esta empresa.', { cause: error })
+      }
+      if (error instanceof RequestError && error.status === 402) {
+        throw new Error('Supabase restringio el servicio por la cuota o el plan. Revisa Usage en Supabase.', { cause: error })
+      }
+      throw error
+    }
   }
-
-  return parseRemotePlaylist(await response.json())
+  throw new Error('No se pudo leer la playlist.')
 }

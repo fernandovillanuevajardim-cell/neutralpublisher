@@ -30,6 +30,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import { DisplayAccess } from './DisplayAccess'
 import { ScreenManager } from './ScreenManager'
+import { shortenDisplayLink } from './shortLinks'
 import {
   addFiles,
   addRemoteMedia,
@@ -465,14 +466,18 @@ function AdminView() {
   const [pdfQuality, setPdfQuality] = useState<PdfConvertQuality>(200)
   const [pdfProgress, setPdfProgress] = useState('')
   const [isConvertingPdf, setIsConvertingPdf] = useState(false)
-  const [shortDisplayUrl, setShortDisplayUrl] = useState('')
+  const [shortDisplayUrl, setShortDisplayUrl] = useState<{ target: string; url: string } | null>(null)
   const [isShorteningUrl, setIsShorteningUrl] = useState(false)
+  const [isSyncingPlaylist, setIsSyncingPlaylist] = useState(false)
+  const playlistRequest = useRef<AbortController | null>(null)
   const [organizations, setOrganizations] = useState<Organization[]>([])
   const [selectedOrganizationId, setSelectedOrganizationId] = useState(() => loadOrganizationId())
   const [newOrganizationName, setNewOrganizationName] = useState('')
   const [organizationMessage, setOrganizationMessage] = useState('')
   const cloudReady = isCloudStorageConfigured()
   const cloudAuthenticated = Boolean(cloudUserEmail)
+
+  useEffect(() => () => playlistRequest.current?.abort(), [])
 
   useEffect(() => {
     if (!cloudReady) {
@@ -578,7 +583,7 @@ function AdminView() {
   const changeOrganization = (organizationId: string) => {
     setSelectedOrganizationId(organizationId)
     saveOrganizationId(organizationId)
-    setShortDisplayUrl('')
+    setShortDisplayUrl(null)
   }
 
   const addOrganization = async () => {
@@ -827,22 +832,30 @@ function AdminView() {
   }
 
   const syncPlaylistUrl = async () => {
+    if (playlistRequest.current) return
     const url = playlistUrl.trim()
 
-    saveRemotePlaylistUrl(url)
-
     if (!url) {
-      setStatusMessage('Playlist remota desactivada.')
+      setStatusMessage('Pega el enlace de la playlist o selecciona Canal de empresa.')
       return
     }
 
+    const controller = new AbortController()
+    playlistRequest.current = controller
+    setIsSyncingPlaylist(true)
+    setStatusMessage('Sincronizando playlist...')
     try {
-      const playlist = await fetchRemotePlaylist(url)
+      const playlist = await fetchRemotePlaylist(url, controller.signal)
+      if (controller.signal.aborted) return
       await replaceWithRemotePlaylist(playlist)
+      saveRemotePlaylistUrl(url)
       await refresh()
       setStatusMessage(`Sincronizado: ${playlist.items.length} contenidos.`)
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : 'No se pudo sincronizar la playlist remota.')
+      if (!controller.signal.aborted) setStatusMessage(error instanceof Error ? error.message : 'No se pudo sincronizar la playlist remota.')
+    } finally {
+      playlistRequest.current = null
+      if (!controller.signal.aborted) setIsSyncingPlaylist(false)
     }
   }
 
@@ -863,16 +876,16 @@ function AdminView() {
   }
 
   const displayUrl = buildDisplayUrl('', displayBaseUrl, kioskMode, selectedOrganizationId)
-  const tvUrl = shortDisplayUrl || displayUrl
+  const tvUrl = shortDisplayUrl?.target === displayUrl ? shortDisplayUrl.url : displayUrl
 
   const updateDisplayBaseUrl = (value: string) => {
-    setShortDisplayUrl('')
+    setShortDisplayUrl(null)
     setDisplayBaseUrl(value)
     saveDisplayBaseUrl(value)
   }
 
   const updateKioskMode = (enabled: boolean) => {
-    setShortDisplayUrl('')
+    setShortDisplayUrl(null)
     setKioskMode(enabled)
     saveKioskMode(enabled)
   }
@@ -895,14 +908,8 @@ function AdminView() {
     try {
       setIsShorteningUrl(true)
       setLinkMessage('Generando enlace corto...')
-      const response = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(displayUrl)}`)
-      const text = (await response.text()).trim()
-
-      if (!response.ok || !/^https?:\/\//.test(text)) {
-        throw new Error('No se pudo generar el enlace corto.')
-      }
-
-      setShortDisplayUrl(text)
+      const text = await shortenDisplayLink(displayUrl)
+      setShortDisplayUrl({ target: displayUrl, url: text })
       setLinkMessage('Enlace corto listo.')
     } catch (error) {
       setLinkMessage(error instanceof Error ? error.message : 'No se pudo generar el enlace corto.')
@@ -963,7 +970,7 @@ function AdminView() {
             <span>Empresa activa</span>
             <select
               value={selectedOrganizationId}
-              disabled={!cloudReady || !cloudAuthenticated}
+              disabled={!cloudReady || !cloudAuthenticated || isSyncingPlaylist}
               onChange={(event) => changeOrganization(event.target.value)}
             >
               <option value="">Canal principal sin empresa</option>
@@ -1248,12 +1255,22 @@ function AdminView() {
         <div className="sync-grid">
           <input
             value={playlistUrl}
+            aria-label="URL de playlist remota"
+            disabled={isSyncingPlaylist}
             placeholder="https://cdn.ejemplo.com/neutralpublisher-playlist.json"
             onChange={(event) => setPlaylistUrl(event.target.value)}
           />
-          <button className="icon-button labeled" type="button" onClick={() => void syncPlaylistUrl()} title="Sincronizar JSON">
+          <button className="icon-button labeled" type="button" disabled={isSyncingPlaylist} onClick={() => void syncPlaylistUrl()} title="Sincronizar JSON">
             <RefreshCw size={18} />
             <span>Sincronizar</span>
+          </button>
+          <button className="icon-button labeled" type="button" disabled={!cloudReady || isSyncingPlaylist}
+            title="Usar la playlist publicada de la empresa seleccionada"
+            onClick={() => {
+              setPlaylistUrl(getChannelPlaylistUrl('principal', selectedOrganizationId || undefined))
+              setStatusMessage('Enlace del canal seleccionado.')
+            }}>
+            <Building2 size={18} /><span>{selectedOrganizationId ? 'Canal de empresa' : 'Canal principal'}</span>
           </button>
           <button className="icon-button labeled" type="button" onClick={() => void loadDemoPlaylist()} title="Cargar demo">
             <Sparkles size={18} />
@@ -1323,7 +1340,7 @@ function AdminView() {
                 title="Crear enlace corto"
               >
                 <Link size={18} />
-                <span>{shortDisplayUrl ? 'Acortado' : 'Acortar'}</span>
+                <span>{tvUrl !== displayUrl ? 'Acortado' : 'Acortar'}</span>
               </button>
               <a className="icon-button labeled" href={tvUrl} target="_blank" rel="noreferrer" title="Abrir visor">
                 <ExternalLink size={18} />
@@ -1644,6 +1661,7 @@ function DisplayView() {
   useEffect(() => {
     const controller = new AbortController()
     let running = false
+    let loaded = false
     const sync = async () => {
       if (running || controller.signal.aborted) return
       running = true
@@ -1656,7 +1674,14 @@ function DisplayView() {
           try {
             const playlist = await fetchRemotePlaylist(syncUrl, controller.signal)
             if (controller.signal.aborted) return
-            await replaceWithRemotePlaylist(playlist)
+            const changed = await replaceWithRemotePlaylist(playlist)
+            if (controller.signal.aborted) return
+            if (changed || !loaded) {
+              await refresh()
+              loaded = true
+            }
+            setPlaybackMessage('')
+            return
           } catch {
             // Mounted players retain their current images; never load another organization's local list.
             if (organizationId) return
@@ -1664,7 +1689,10 @@ function DisplayView() {
         }
 
         if (controller.signal.aborted) return
-        await refresh()
+        if (!loaded) {
+          await refresh()
+          loaded = true
+        }
         setPlaybackMessage('')
       } finally {
         running = false
