@@ -2,7 +2,7 @@
 import { act, useEffect } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { DisplayAccess } from '../src/DisplayAccess'
+import { DisplayAccess, OFFLINE_GRACE_MS } from '../src/DisplayAccess'
 import { heartbeat, HEARTBEAT_MS } from '../src/displayControl'
 
 vi.mock('../src/displayControl', () => ({
@@ -65,12 +65,30 @@ it('fails closed on connection error and never shows a loading message', async (
   expect(container.textContent).not.toMatch(/cargando/i)
 })
 
-it('revokes playback if control becomes unreachable', async () => {
+it('keeps the last authorized slide through a brief control outage and retries promptly', async () => {
   vi.mocked(heartbeat).mockResolvedValueOnce('enabled').mockRejectedValueOnce(new Error('offline'))
   await render()
   await act(() => vi.advanceTimersByTimeAsync(HEARTBEAT_MS))
+  expect(stop).not.toHaveBeenCalled()
+  expect(container.querySelector('video')).not.toBeNull()
+  await act(() => vi.advanceTimersByTimeAsync(15_000))
+  expect(heartbeat).toHaveBeenCalledTimes(3)
+})
+
+it('stops playback after the offline grace expires', async () => {
+  vi.mocked(heartbeat).mockResolvedValueOnce('enabled').mockRejectedValue(new Error('offline'))
+  await render()
+  await act(() => vi.advanceTimersByTimeAsync(OFFLINE_GRACE_MS + HEARTBEAT_MS))
   expect(stop).toHaveBeenCalledOnce()
-  expect(container.querySelector('video')).toBeNull()
+  expect(container.textContent).toContain('Sin conexion')
+})
+
+it('honors an explicit disable as soon as the control reconnects', async () => {
+  vi.mocked(heartbeat).mockResolvedValueOnce('enabled').mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce('disabled')
+  await render()
+  await act(() => vi.advanceTimersByTimeAsync(HEARTBEAT_MS + 15_000))
+  expect(stop).toHaveBeenCalledOnce()
+  expect(container.textContent).toContain('Pantalla desactivada')
 })
 
 it('aborts a stalled heartbeat and prevents overlapping polls', async () => {

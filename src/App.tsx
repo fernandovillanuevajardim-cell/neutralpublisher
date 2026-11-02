@@ -387,30 +387,6 @@ const preloadImage = (url: string, signal: AbortSignal) =>
     image.src = url
   })
 
-const mediaCacheName = 'neutralpublisher-media-v1'
-
-const cacheRemoteMedia = async (item: MediaItemWithPreview, signal?: AbortSignal) => {
-  if (item.source !== 'remote' || !item.url || item.kind !== 'image' || !('caches' in window)) {
-    return item.previewUrl
-  }
-
-  const cache = await caches.open(mediaCacheName)
-  const cached = await cache.match(item.url)
-
-  if (cached) {
-    return URL.createObjectURL(await cached.blob())
-  }
-
-  const response = await fetch(item.url, { cache: 'force-cache', signal })
-
-  if (!response.ok) {
-    throw new Error('No se pudo cachear el contenido.')
-  }
-
-  await cache.put(item.url, response.clone())
-  return URL.createObjectURL(await response.blob())
-}
-
 function usePublisherData(initialLoad = true) {
   const [items, setItems] = useState<MediaItemWithPreview[]>([])
   const [settings, setSettings] = useState<PublisherSettings>(() => loadSettings())
@@ -1483,20 +1459,12 @@ function DisplayView() {
   const [weather, setWeather] = useState<WeatherSnapshot | null>(null)
   const [playbackMessage, setPlaybackMessage] = useState('')
   const [readyImageIds, setReadyImageIds] = useState<Set<string>>(() => new Set())
-  const [cachedPreviewUrls, setCachedPreviewUrls] = useState<Record<string, string>>({})
-  const cachedObjectUrls = useRef<string[]>([])
+  const nextSlideAt = useRef(0)
   const kioskMode = getHashKioskMode()
   const organizationId = getHashOrganizationId()
 
   const safeActiveIndex = items.length ? activeIndex % items.length : 0
-  const displayItems = useMemo(
-    () =>
-      items.map((item) => ({
-        ...item,
-        previewUrl: cachedPreviewUrls[item.id] || item.previewUrl,
-      })),
-    [cachedPreviewUrls, items],
-  )
+  const displayItems = items
   const activeItem = displayItems[safeActiveIndex]
   const nextItem = displayItems[(safeActiveIndex + 1) % displayItems.length]
   const activeDuration = activeItem?.durationSeconds || settings.slideSeconds
@@ -1553,65 +1521,16 @@ function DisplayView() {
   }, [settings.showWeather, settings.weatherCity])
 
   useEffect(() => {
-    if (!items.length || activeItem?.kind === 'video') {
-      return
-    }
-
-    const timer = window.setTimeout(() => {
-      goToNextItem()
-    }, activeDuration * 1000)
-
-    return () => window.clearTimeout(timer)
-  }, [activeDuration, activeItem?.kind, activeIndex, goToNextItem, items.length])
+    nextSlideAt.current = Date.now() + activeDuration * 1000
+  }, [activeDuration, activeItem?.id, activeIndex])
 
   useEffect(() => {
-    let cancelled = false
-
-    const warmCache = async () => {
-      const entries: Record<string, string> = {}
-
-      for (const item of items) {
-        if (cancelled) break
-        if (item.source !== 'remote' || item.kind !== 'image') {
-          continue
-        }
-
-        try {
-          const cachedUrl = await cacheRemoteMedia(item, controller.signal)
-          if (cancelled) {
-            if (cachedUrl.startsWith('blob:')) URL.revokeObjectURL(cachedUrl)
-            break
-          }
-
-          if (cachedUrl !== item.previewUrl) {
-            cachedObjectUrls.current.push(cachedUrl)
-            entries[item.id] = cachedUrl
-          }
-
-          if (!cancelled && Object.keys(entries).length) {
-            setCachedPreviewUrls((current) => ({ ...current, ...entries }))
-          }
-        } catch {
-          // The display keeps using the public URL if local caching fails.
-        }
-      }
-    }
-
-    const controller = new AbortController()
-    void warmCache()
-
-    return () => {
-      cancelled = true
-      controller.abort()
-    }
-  }, [items])
-
-  useEffect(() => {
-    return () => {
-      cachedObjectUrls.current.forEach((url) => URL.revokeObjectURL(url))
-      cachedObjectUrls.current = []
-    }
-  }, [])
+    if (!items.length || activeItem?.kind === 'video') return
+    const timer = window.setInterval(() => {
+      if (Date.now() >= nextSlideAt.current) goToNextItem()
+    }, 500)
+    return () => window.clearInterval(timer)
+  }, [activeItem?.kind, goToNextItem, items.length])
 
   useEffect(() => {
     if (!items.length) {
@@ -1619,7 +1538,7 @@ function DisplayView() {
     }
 
     let cancelled = false
-    const preloadTargets = [0, 1, 2]
+    const preloadTargets = [0, 1]
       .map((offset) => displayItems[(safeActiveIndex + offset) % displayItems.length])
       .filter((item): item is MediaItemWithPreview => Boolean(item && item.kind === 'image'))
     const controller = new AbortController()
