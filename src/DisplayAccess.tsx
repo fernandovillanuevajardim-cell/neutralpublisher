@@ -1,13 +1,19 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { MonitorOff } from 'lucide-react'
-import { getDeviceIdentity, heartbeat, HEARTBEAT_MS, type DeviceState } from './displayControl'
+import { clearVerified, getDeviceIdentity, getLastVerifiedAt, heartbeat, HEARTBEAT_MS, recordVerified, type DeviceState } from './displayControl'
 
 export const OFFLINE_GRACE_MS = 30 * 60_000
 const retryDelay = (failures: number) => Math.min(15_000 * 2 ** Math.min(failures - 1, 2), 60_000)
 
 export function DisplayAccess({ organizationId, children }: { organizationId: string; children: ReactNode }) {
-  const [state, setState] = useState<DeviceState | 'checking' | 'error'>('checking')
+  const [state, setState] = useState<DeviceState | 'checking' | 'error'>(() => {
+    try {
+      if (organizationId && Date.now() - getLastVerifiedAt(organizationId, getDeviceIdentity(organizationId)) <= OFFLINE_GRACE_MS) return 'enabled'
+    } catch { /* The heartbeat will report an identity problem. */ }
+    return 'checking'
+  })
   const [code, setCode] = useState('')
+  const [errorDetail, setErrorDetail] = useState('')
 
   useEffect(() => {
     if (!organizationId) return
@@ -20,21 +26,30 @@ export function DisplayAccess({ organizationId, children }: { organizationId: st
       request = new AbortController()
       const timeout = window.setTimeout(() => request?.abort(), 15_000)
       let delay = HEARTBEAT_MS
+      let phase: 'identity' | 'control' = 'identity'
       try {
         const identity = getDeviceIdentity(organizationId)
+        lastEnabledAt ||= getLastVerifiedAt(organizationId, identity)
+        if (!cancelled) setCode(identity.id.slice(0, 8))
+        phase = 'control'
         const next = await heartbeat(organizationId, identity, request.signal)
         if (!cancelled) {
           failures = 0
-          if (next === 'enabled') lastEnabledAt = Date.now()
-          else lastEnabledAt = 0
-          setCode(identity.id.slice(0, 8))
+          if (next === 'enabled') {
+            lastEnabledAt = Date.now()
+            recordVerified(organizationId, identity)
+          } else {
+            lastEnabledAt = 0
+            clearVerified(organizationId)
+          }
+          setErrorDetail('')
           setState(next)
         }
-      } catch {
+      } catch (error) {
         if (!cancelled) {
           failures += 1
           delay = retryDelay(failures)
-          // A previously authorized screen keeps its current slide during a brief outage.
+          setErrorDetail(phase === 'identity' ? 'No se pudo recuperar la identidad guardada.' : error instanceof Error ? error.message : 'Error de conexion.')
           if (!lastEnabledAt || Date.now() - lastEnabledAt > OFFLINE_GRACE_MS) setState('error')
         }
       } finally {
@@ -57,6 +72,7 @@ export function DisplayAccess({ organizationId, children }: { organizationId: st
         <MonitorOff size={28} />
         <h1>{state === 'disabled' ? 'Pantalla desactivada' : state === 'pending' ? 'Pantalla pendiente de autorizacion' : 'Sin conexion con el control de pantallas'}</h1>
         {code && <p>Pantalla {code}</p>}
+        {state === 'error' && errorDetail && <p>{errorDetail}</p>}
       </>}
     </main>
   )

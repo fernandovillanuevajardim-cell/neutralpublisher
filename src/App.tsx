@@ -29,6 +29,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import { DisplayAccess } from './DisplayAccess'
+import { loadDisplayPlaylist, saveDisplayPlaylist, toDisplayItems } from './displayPlaylistCache'
 import { ScreenManager } from './ScreenManager'
 import { shortenDisplayLink } from './shortLinks'
 import {
@@ -69,7 +70,7 @@ import {
 } from './cloudStorage'
 import { fetchRemotePlaylist, parseRemotePlaylist } from './playlist'
 import { convertPdfToPngFiles, type PdfConvertQuality } from './pdfTools'
-import type { MediaItem, MediaItemWithPreview, PublisherSettings, TransitionName } from './types'
+import type { MediaItem, MediaItemWithPreview, PublisherSettings, RemotePlaylist, TransitionName } from './types'
 
 const transitions: Array<{ value: TransitionName; label: string }> = [
   { value: 'fade', label: 'Fade' },
@@ -387,9 +388,10 @@ const preloadImage = (url: string, signal: AbortSignal) =>
     image.src = url
   })
 
-function usePublisherData(initialLoad = true) {
-  const [items, setItems] = useState<MediaItemWithPreview[]>([])
-  const [settings, setSettings] = useState<PublisherSettings>(() => loadSettings())
+function usePublisherData(initialLoad = true, cachedDisplay?: { organizationId: string; playlist: RemotePlaylist } | null) {
+  const [items, setItems] = useState<MediaItemWithPreview[]>(() =>
+    cachedDisplay ? toDisplayItems(cachedDisplay.organizationId, cachedDisplay.playlist) : [])
+  const [settings, setSettings] = useState<PublisherSettings>(() => cachedDisplay?.playlist.settings ?? loadSettings())
   const objectUrls = useRef<string[]>([])
 
   const refresh = useCallback(async () => {
@@ -420,7 +422,7 @@ function usePublisherData(initialLoad = true) {
     saveSettings(nextSettings)
   }
 
-  return { items, settings, refresh, updateSettings, setItems }
+  return { items, settings, refresh, updateSettings, setItems, setSettings }
 }
 
 function AdminView() {
@@ -1453,7 +1455,11 @@ function AdminView() {
 }
 
 function DisplayView() {
-  const { items, settings, refresh } = usePublisherData(!getHashOrganizationId())
+  const organizationId = getHashOrganizationId()
+  const displayPlaylistUrl = getHashPlaylistUrl() || (organizationId ? '' : loadRemotePlaylistUrl()) || getDefaultDisplayPlaylistUrl(organizationId || undefined)
+  const cachedPlaylist = useMemo(() => organizationId ? loadDisplayPlaylist(organizationId, displayPlaylistUrl) : null, [organizationId, displayPlaylistUrl])
+  const { items, settings, refresh, setItems, setSettings } = usePublisherData(!organizationId, cachedPlaylist ? { organizationId, playlist: cachedPlaylist } : null)
+  const lastPlaylist = useRef(cachedPlaylist ? JSON.stringify(cachedPlaylist) : '')
   const [activeIndex, setActiveIndex] = useState(0)
   const [clock, setClock] = useState(() => new Date())
   const [weather, setWeather] = useState<WeatherSnapshot | null>(null)
@@ -1461,7 +1467,6 @@ function DisplayView() {
   const [readyImageIds, setReadyImageIds] = useState<Set<string>>(() => new Set())
   const nextSlideAt = useRef(0)
   const kioskMode = getHashKioskMode()
-  const organizationId = getHashOrganizationId()
 
   const safeActiveIndex = items.length ? activeIndex % items.length : 0
   const displayItems = items
@@ -1585,14 +1590,21 @@ function DisplayView() {
       if (running || controller.signal.aborted) return
       running = true
       try {
-        const url = getHashPlaylistUrl() || (organizationId ? '' : loadRemotePlaylistUrl())
-        const defaultUrl = getDefaultDisplayPlaylistUrl(organizationId || undefined)
-        const syncUrl = url || defaultUrl
-
-        if (syncUrl) {
+        if (displayPlaylistUrl) {
           try {
-            const playlist = await fetchRemotePlaylist(syncUrl, controller.signal)
+            const playlist = await fetchRemotePlaylist(displayPlaylistUrl, controller.signal)
             if (controller.signal.aborted) return
+            if (organizationId) {
+              const serialized = JSON.stringify(playlist)
+              if (serialized !== lastPlaylist.current) {
+                setItems(toDisplayItems(organizationId, playlist))
+                setSettings(playlist.settings)
+                lastPlaylist.current = serialized
+              }
+              saveDisplayPlaylist(organizationId, displayPlaylistUrl, playlist)
+              setPlaybackMessage('')
+              return
+            }
             const changed = await replaceWithRemotePlaylist(playlist)
             if (controller.signal.aborted) return
             if (changed || !loaded) {
@@ -1622,7 +1634,7 @@ function DisplayView() {
 
     const interval = window.setInterval(() => void sync(), 5 * 60_000)
     return () => { controller.abort(); window.clearInterval(interval) }
-  }, [organizationId, refresh])
+  }, [displayPlaylistUrl, organizationId, refresh, setItems, setSettings])
 
   const formattedClock = useMemo(
     () =>

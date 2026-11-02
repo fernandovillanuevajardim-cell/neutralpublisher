@@ -13,6 +13,29 @@ export type DisplayDevice = {
 }
 export type DeviceIdentity = { id: string; secret: string }
 
+const verifiedKey = (organizationId: string) => `neutralpublisher-verified-v1:${organizationId}`
+
+export function getLastVerifiedAt(organizationId: string, identity: DeviceIdentity): number {
+  try {
+    const saved = JSON.parse(localStorage.getItem(verifiedKey(organizationId)) || 'null') as { id?: string; at?: number } | null
+    return saved?.id === identity.id && typeof saved.at === 'number' && saved.at <= Date.now() ? saved.at : 0
+  } catch {
+    return 0
+  }
+}
+
+export function recordVerified(organizationId: string, identity: DeviceIdentity) {
+  try {
+    localStorage.setItem(verifiedKey(organizationId), JSON.stringify({ id: identity.id, at: Date.now() }))
+  } catch {
+    // The current tab remains authorized even if persistent storage is unavailable.
+  }
+}
+
+export function clearVerified(organizationId: string) {
+  try { localStorage.removeItem(verifiedKey(organizationId)) } catch { /* Storage may be unavailable. */ }
+}
+
 export function getDeviceIdentity(organizationId: string): DeviceIdentity {
   const key = `neutralpublisher-device-v1:${organizationId}`
   const saved = localStorage.getItem(key)

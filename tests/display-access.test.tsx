@@ -3,11 +3,14 @@ import { act, useEffect } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { DisplayAccess, OFFLINE_GRACE_MS } from '../src/DisplayAccess'
-import { heartbeat, HEARTBEAT_MS } from '../src/displayControl'
+import { clearVerified, getLastVerifiedAt, heartbeat, HEARTBEAT_MS, recordVerified } from '../src/displayControl'
 
 vi.mock('../src/displayControl', () => ({
   HEARTBEAT_MS: 300_000,
   getDeviceIdentity: () => ({ id: '12345678-abcd', secret: 'test-only' }),
+  getLastVerifiedAt: vi.fn(() => 0),
+  recordVerified: vi.fn(),
+  clearVerified: vi.fn(),
   heartbeat: vi.fn(),
 }))
 
@@ -22,6 +25,7 @@ function Player() {
 beforeEach(() => {
   vi.useFakeTimers()
   vi.clearAllMocks()
+  vi.mocked(getLastVerifiedAt).mockReturnValue(0)
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
   container = document.createElement('div')
   document.body.append(container)
@@ -49,6 +53,7 @@ it('unmounts the entire player on disable and resumes only after authorization',
   vi.mocked(heartbeat).mockResolvedValueOnce('enabled').mockResolvedValueOnce('disabled').mockResolvedValueOnce('enabled')
   await render()
   expect(mount).toHaveBeenCalledTimes(1)
+  expect(recordVerified).toHaveBeenCalledWith('company-a', { id: '12345678-abcd', secret: 'test-only' })
   await act(() => vi.advanceTimersByTimeAsync(HEARTBEAT_MS))
   expect(container.querySelector('video')).toBeNull()
   expect(stop).toHaveBeenCalledTimes(1)
@@ -62,7 +67,25 @@ it('fails closed on connection error and never shows a loading message', async (
   await render()
   expect(mount).not.toHaveBeenCalled()
   expect(container.textContent).toContain('Sin conexion')
+  expect(container.textContent).toContain('Pantalla 12345678')
   expect(container.textContent).not.toMatch(/cargando/i)
+})
+
+it('reopens a recently authorized TV with its previous content while control retries', async () => {
+  vi.mocked(getLastVerifiedAt).mockReturnValue(Date.now() - 60_000)
+  vi.mocked(heartbeat).mockRejectedValue(new Error('offline'))
+  await render()
+  expect(mount).toHaveBeenCalledOnce()
+  expect(container.querySelector('video')).not.toBeNull()
+  expect(stop).not.toHaveBeenCalled()
+})
+
+it('does not trust an expired authorization on browser restart', async () => {
+  vi.mocked(getLastVerifiedAt).mockReturnValue(Date.now() - OFFLINE_GRACE_MS - 1)
+  vi.mocked(heartbeat).mockRejectedValue(new Error('offline'))
+  await render()
+  expect(mount).not.toHaveBeenCalled()
+  expect(container.textContent).toContain('Sin conexion')
 })
 
 it('keeps the last authorized slide through a brief control outage and retries promptly', async () => {
@@ -88,6 +111,7 @@ it('honors an explicit disable as soon as the control reconnects', async () => {
   await render()
   await act(() => vi.advanceTimersByTimeAsync(HEARTBEAT_MS + 15_000))
   expect(stop).toHaveBeenCalledOnce()
+  expect(clearVerified).toHaveBeenCalledWith('company-a')
   expect(container.textContent).toContain('Pantalla desactivada')
 })
 
