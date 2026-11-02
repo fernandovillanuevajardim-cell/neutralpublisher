@@ -17,9 +17,9 @@ beforeAll(async () => {
     create function auth.uid() returns uuid language sql as
       $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
     grant usage on schema auth to anon, authenticated;
-    create table public.organizations(id uuid primary key);
+    create table public.organizations(id uuid primary key, name text default 'Test company');
     create table public.organization_members(organization_id uuid, user_id uuid, role text);
-    insert into organizations values ('${orgA}'), ('${orgB}');
+    insert into organizations(id) values ('${orgA}'), ('${orgB}');
     insert into organization_members values ('${orgA}', '${adminA}', 'admin'),
       ('${orgB}', '${adminB}', 'owner'), ('${orgA}', '${editor}', 'editor');
   `)
@@ -27,6 +27,13 @@ beforeAll(async () => {
   const start = schema.indexOf('create or replace function public.can_admin_org(')
   const end = schema.indexOf('$$;', start) + 3
   await db.exec(schema.slice(start, end))
+  const memberStart = schema.indexOf('create or replace function public.is_org_member(')
+  await db.exec(schema.slice(memberStart, schema.indexOf('$$;', memberStart) + 3))
+  const policyStart = schema.indexOf('create policy "organizations read member"')
+  await db.exec(schema.slice(policyStart, schema.indexOf(';', policyStart) + 1))
+  const readPermissions = readFileSync('backend/supabase/organization-read-permissions.sql', 'utf8')
+  await db.exec(readPermissions)
+  await db.exec(readPermissions)
   const migration = readFileSync('backend/supabase/display-control.sql', 'utf8')
   await db.exec(migration)
   await db.exec(migration) // Migration must be safe to reapply.
@@ -49,6 +56,25 @@ it('anonymous enrollment defaults to pending and repeated calls reuse one row', 
   expect(await pulse()).toBe('pending')
   await as('authenticated', adminA)
   expect((await db.query('select id from display_devices')).rows).toHaveLength(1)
+})
+it('allows the organization dropdown query but only for the authenticated member company', async () => {
+  await as('authenticated', adminA)
+  const result = await db.query<{ id: string }>('select id, name from organizations order by name')
+  expect(result.rows.map((r) => r.id)).toEqual([orgA])
+  await as('authenticated', adminB)
+  expect((await db.query<{ id: string }>('select id, name from organizations')).rows.map((r) => r.id)).toEqual([orgB])
+})
+it('also allows editors to see their company without granting admin access', async () => {
+  await as('authenticated', editor)
+  expect((await db.query<{ id: string }>('select id, name from organizations')).rows.map((r) => r.id)).toEqual([orgA])
+})
+it('does not list organizations to anonymous visitors', async () => {
+  await as('anon')
+  await expect(db.query('select id, name from organizations')).rejects.toThrow(/permission denied/)
+})
+it('does not grant organization writes along with the read repair', async () => {
+  await as('authenticated', adminA)
+  await expect(db.query("update organizations set name = 'Changed'")).rejects.toThrow(/permission denied/)
 })
 it('anonymous devices cannot read the device list', async () => {
   await as('anon')

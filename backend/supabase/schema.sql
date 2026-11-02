@@ -328,6 +328,9 @@ for select
 to authenticated
 using (public.is_org_member(id));
 
+-- RLS filters rows but does not itself grant Data API access.
+grant select (id, name) on public.organizations to authenticated;
+
 create policy "organizations insert authenticated"
 on public.organizations
 for insert
