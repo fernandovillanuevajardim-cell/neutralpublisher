@@ -2,10 +2,11 @@
 
 ## Activacion
 
-1. Ejecutar `backend/supabase/display-control.sql` en el proyecto configurado, despues de `schema.sql`.
-2. Desplegar esta version de la web. Si el SQL aun no esta aplicado, el listado y la autorizacion existentes siguen funcionando, pero el interruptor aparece deshabilitado.
-3. Abrir el enlace del visor generado para una empresa (`#/display?org=...`) en cada pantalla.
-4. En Admin > Pantallas, actualizar y autorizar el codigo que aparece en la TV. Renombrarlo, por ejemplo, `Sucursal Centro - Caja`.
+1. En un proyecto existente, ejecutar **solo** `backend/supabase/display-control-toggle.sql` en SQL Editor. No volver a ejecutar las politicas anteriores.
+2. En una instalacion nueva, ejecutar `schema.sql`, `display-control.sql` y luego `display-control-toggle.sql`.
+3. Desplegar la web. Si el SQL del interruptor aun no esta aplicado, el listado y la autorizacion existentes siguen funcionando, pero el interruptor aparece deshabilitado.
+4. Abrir el enlace del visor generado para una empresa (`#/display?org=...`) en cada pantalla.
+5. En Admin > Pantallas, actualizar y autorizar el codigo que aparece en la TV. Renombrarlo, por ejemplo, `Sucursal Centro - Caja`.
 
 Solo owner/admin de la misma organizacion pueden consultar o cambiar pantallas. Los editores no tienen ese permiso.
 

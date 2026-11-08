@@ -38,6 +38,9 @@ beforeAll(async () => {
   const migration = readFileSync('backend/supabase/display-control.sql', 'utf8')
   await db.exec(migration)
   await db.exec(migration) // Migration must be safe to reapply.
+  const toggle = readFileSync('backend/supabase/display-control-toggle.sql', 'utf8')
+  await db.exec(toggle)
+  await db.exec(toggle)
 })
 beforeEach(() => db.exec('begin'))
 afterEach(() => db.exec('rollback'))
