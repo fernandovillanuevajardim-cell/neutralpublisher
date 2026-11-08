@@ -80,6 +80,17 @@ it('reopens a recently authorized TV with its previous content while control ret
   expect(stop).not.toHaveBeenCalled()
 })
 
+it('stops showing deleted organization media even during the offline grace period', async () => {
+  vi.mocked(getLastVerifiedAt).mockReturnValue(Date.now() - 60_000)
+  vi.mocked(heartbeat).mockRejectedValue(new Error('Organization unavailable'))
+  await render()
+  expect(mount).toHaveBeenCalledOnce()
+  expect(stop).toHaveBeenCalledOnce()
+  expect(container.querySelector('video')).toBeNull()
+  expect(clearVerified).toHaveBeenCalledWith('company-a')
+  expect(container.textContent).toContain('Esta organizacion ya no existe')
+})
+
 it('does not trust an expired authorization on browser restart', async () => {
   vi.mocked(getLastVerifiedAt).mockReturnValue(Date.now() - OFFLINE_GRACE_MS - 1)
   vi.mocked(heartbeat).mockRejectedValue(new Error('offline'))

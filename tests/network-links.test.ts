@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { fetchRemotePlaylist } from '../src/playlist'
+import { countForeignOrganizationMedia, fetchPublishedPlaylistOrNull, fetchRemotePlaylist, isLargePlaylistReduction } from '../src/playlist'
 import { requestJson } from '../src/network'
 import { shortenDisplayLink } from '../src/shortLinks'
 
@@ -16,6 +16,25 @@ it('reads valid playlists and only requests the JSON, not the image files', asyn
   expect((await fetchRemotePlaylist(playlistUrl)).items).toHaveLength(1)
   expect(fetchMock).toHaveBeenCalledTimes(1)
   expect(fetchMock.mock.calls[0][0]).toBe(playlistUrl)
+})
+it('detects media links from a different organization before publishing', () => {
+  const project = 'https://project.supabase.co'
+  const media = `${project}/storage/v1/object/public/media/orgs/`
+  expect(countForeignOrganizationMedia([
+    `${media}company-a/media/one.webp`,
+    `${media}company-b/media/two.webp`,
+    'https://example.com/promo.webp',
+  ], 'company-b', project)).toBe(1)
+})
+it('warns about an accidental large reduction but allows normal removals', () => {
+  expect(isLargePlaylistReduction(49, 1)).toBe(true)
+  expect(isLargePlaylistReduction(49, 48)).toBe(false)
+  expect(isLargePlaylistReduction(49, 30)).toBe(false)
+  expect(isLargePlaylistReduction(1, 0)).toBe(false)
+})
+it('allows a first publication when the channel has not been created', async () => {
+  fetchMock.mockResolvedValue(new Response('{}', { status: 404 }))
+  await expect(fetchPublishedPlaylistOrNull(playlistUrl)).resolves.toBeNull()
 })
 it('retries a transient network failure once', async () => {
   fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch')).mockResolvedValueOnce(new Response(JSON.stringify(playlist)))

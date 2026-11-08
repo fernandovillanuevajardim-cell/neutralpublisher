@@ -49,8 +49,14 @@ export function DisplayAccess({ organizationId, children }: { organizationId: st
         if (!cancelled) {
           failures += 1
           delay = retryDelay(failures)
-          setErrorDetail(phase === 'identity' ? 'No se pudo recuperar la identidad guardada.' : error instanceof Error ? error.message : 'Error de conexion.')
-          if (!lastEnabledAt || Date.now() - lastEnabledAt > OFFLINE_GRACE_MS) setState('error')
+          const detail = phase === 'identity' ? 'No se pudo recuperar la identidad guardada.' : error instanceof Error ? error.message : 'Error de conexion.'
+          const organizationUnavailable = phase === 'control' && /organization unavailable/i.test(detail)
+          setErrorDetail(organizationUnavailable ? 'Esta organizacion ya no existe. Usa un enlace nuevo desde el administrador.' : detail)
+          if (organizationUnavailable) {
+            lastEnabledAt = 0
+            clearVerified(organizationId)
+          }
+          if (organizationUnavailable || !lastEnabledAt || Date.now() - lastEnabledAt > OFFLINE_GRACE_MS) setState('error')
         }
       } finally {
         window.clearTimeout(timeout)

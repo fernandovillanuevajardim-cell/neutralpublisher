@@ -68,7 +68,8 @@ import {
   uploadMediaToCloud,
   type Organization,
 } from './cloudStorage'
-import { fetchRemotePlaylist, parseRemotePlaylist } from './playlist'
+import { countForeignOrganizationMedia, fetchPublishedPlaylistOrNull, fetchRemotePlaylist, isLargePlaylistReduction, parseRemotePlaylist } from './playlist'
+import { shouldAdvanceImage, shouldSkipStalledVideo } from './playbackTiming'
 import { convertPdfToPngFiles, type PdfConvertQuality } from './pdfTools'
 import type { MediaItem, MediaItemWithPreview, PublisherSettings, RemotePlaylist, TransitionName } from './types'
 
@@ -364,24 +365,27 @@ const makePreviewItems = async (items: MediaItem[]) => {
 const preloadImage = (url: string, signal: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
     const image = new Image()
-    const cleanup = () => signal.removeEventListener('abort', abort)
-    const abort = () => {
+    const cleanup = () => {
+      window.clearTimeout(timeout)
+      signal.removeEventListener('abort', abort)
       image.onload = null
       image.onerror = null
-      image.src = ''
+    }
+    const abort = () => {
       cleanup()
+      image.src = ''
       reject(new DOMException('Aborted', 'AbortError'))
     }
+    const timeout = window.setTimeout(() => {
+      cleanup()
+      image.src = ''
+      reject(new Error('La precarga tardo demasiado.'))
+    }, 12_000)
     if (signal.aborted) { abort(); return }
     signal.addEventListener('abort', abort, { once: true })
     image.decoding = 'async'
     image.onload = () => {
       cleanup()
-      if (image.decode) {
-        image.decode().then(() => resolve()).catch(() => resolve())
-        return
-      }
-
       resolve()
     }
     image.onerror = () => { cleanup(); reject(new Error('No se pudo precargar la imagen.')) }
@@ -761,6 +765,25 @@ function AdminView() {
     }
 
     try {
+      const foreignItems = countForeignOrganizationMedia(
+        items.filter((item) => item.source === 'remote').map((item) => item.url || ''),
+        selectedOrganizationId,
+        import.meta.env.VITE_SUPABASE_URL || '',
+      )
+      if (foreignItems) {
+        throw new Error(`Hay ${foreignItems} archivos de otra organizacion en esta lista. Quita esos enlaces antes de publicar; las imagenes de una empresa no se copian al crear otra.`)
+      }
+
+      const channelUrl = getChannelPlaylistUrl('principal', selectedOrganizationId || undefined)
+      const checkUrl = new URL(channelUrl)
+      checkUrl.searchParams.set('revision', String(Date.now()))
+      const published = await fetchPublishedPlaylistOrNull(checkUrl.href)
+      if (published && isLargePlaylistReduction(published.items.length, items.length) &&
+        !window.confirm(`La playlist publicada tiene ${published.items.length} imagenes y esta lista solo ${items.length}. Si continuas, las pantallas perderan el resto. ¿Publicar igualmente?`)) {
+        setStatusMessage('Publicacion cancelada. Sincroniza el Canal principal para recuperar la lista publicada.')
+        return
+      }
+
       const localItems = items.filter((item) => item.source === 'local')
 
       if (localItems.length) {
@@ -799,7 +822,7 @@ function AdminView() {
 
       const playlist = await exportRemotePlaylist()
 
-      const channelUrl = await publishChannelPlaylistToCloud(playlist, 'principal', selectedOrganizationId || undefined)
+      await publishChannelPlaylistToCloud(playlist, 'principal', selectedOrganizationId || undefined)
 
       setPlaylistUrl(channelUrl)
       saveRemotePlaylistUrl(channelUrl)
@@ -1466,6 +1489,7 @@ function DisplayView() {
   const [playbackMessage, setPlaybackMessage] = useState('')
   const [readyImageIds, setReadyImageIds] = useState<Set<string>>(() => new Set())
   const nextSlideAt = useRef(0)
+  const activeVideo = useRef<HTMLVideoElement | null>(null)
   const kioskMode = getHashKioskMode()
 
   const safeActiveIndex = items.length ? activeIndex % items.length : 0
@@ -1474,7 +1498,7 @@ function DisplayView() {
   const nextItem = displayItems[(safeActiveIndex + 1) % displayItems.length]
   const activeDuration = activeItem?.durationSeconds || settings.slideSeconds
 
-  const goToNextItem = useCallback(() => {
+  const goToNextItem = useCallback((force = false) => {
     if (items.length <= 1) {
       return
     }
@@ -1482,7 +1506,7 @@ function DisplayView() {
     const targetIndex = (safeActiveIndex + 1) % displayItems.length
     const targetItem = displayItems[targetIndex]
 
-    if (targetItem?.kind === 'image' && !readyImageIds.has(targetItem.id)) {
+    if (!force && targetItem?.kind === 'image' && !readyImageIds.has(targetItem.id)) {
       return
     }
 
@@ -1532,10 +1556,30 @@ function DisplayView() {
   useEffect(() => {
     if (!items.length || activeItem?.kind === 'video') return
     const timer = window.setInterval(() => {
-      if (Date.now() >= nextSlideAt.current) goToNextItem()
+      const now = Date.now()
+      const target = displayItems[(safeActiveIndex + 1) % displayItems.length]
+      if (shouldAdvanceImage(now, nextSlideAt.current, target.kind !== 'image' || readyImageIds.has(target.id))) {
+        goToNextItem(now >= nextSlideAt.current + 5_000)
+      }
     }, 500)
     return () => window.clearInterval(timer)
-  }, [activeItem?.kind, goToNextItem, items.length])
+  }, [activeItem?.kind, displayItems, goToNextItem, items.length, readyImageIds, safeActiveIndex])
+
+  useEffect(() => {
+    if (activeItem?.kind !== 'video' || items.length <= 1) return
+    let lastTime = -1
+    let lastProgressAt = Date.now()
+    const timer = window.setInterval(() => {
+      const currentTime = activeVideo.current?.currentTime ?? 0
+      if (currentTime > lastTime + 0.1) {
+        lastTime = currentTime
+        lastProgressAt = Date.now()
+      } else if (shouldSkipStalledVideo(Date.now(), lastProgressAt)) {
+        goToNextItem(true)
+      }
+    }, 5_000)
+    return () => window.clearInterval(timer)
+  }, [activeItem?.id, activeItem?.kind, goToNextItem, items.length])
 
   useEffect(() => {
     if (!items.length) {
@@ -1664,7 +1708,7 @@ function DisplayView() {
     setPlaybackMessage('Contenido no disponible. Saltando...')
 
     window.setTimeout(() => {
-      goToNextItem()
+      goToNextItem(true)
     }, 1200)
   }
 
@@ -1697,6 +1741,7 @@ function DisplayView() {
           <video
             className="stage-media"
             key={activeItem.id}
+            ref={activeVideo}
             autoPlay
             loop={items.length === 1}
             muted={settings.videoMuted}
@@ -1704,7 +1749,7 @@ function DisplayView() {
             playsInline
             preload="auto"
             src={activeItem.previewUrl}
-            onEnded={goToNextItem}
+            onEnded={() => goToNextItem(true)}
           />
         ) : (
           <img className="stage-media" key={activeItem.id} src={activeItem.previewUrl} alt="" decoding="async" onError={handleMediaError} />

@@ -84,3 +84,32 @@ export const fetchRemotePlaylist = async (url: string, signal?: AbortSignal) => 
   }
   throw new Error('No se pudo leer la playlist.')
 }
+
+export async function fetchPublishedPlaylistOrNull(url: string): Promise<RemotePlaylist | null> {
+  try {
+    return await fetchRemotePlaylist(url)
+  } catch (error) {
+    if (error instanceof Error && error.cause instanceof RequestError && error.cause.status === 404) return null
+    throw error
+  }
+}
+
+export function isLargePlaylistReduction(publishedCount: number, nextCount: number): boolean {
+  return publishedCount - nextCount >= 5 && nextCount < publishedCount / 2
+}
+
+export function countForeignOrganizationMedia(urls: string[], organizationId: string, projectUrl: string): number {
+  if (!organizationId || !projectUrl) return 0
+
+  const projectOrigin = new URL(projectUrl).origin
+  return urls.filter((url) => {
+    try {
+      const mediaUrl = new URL(url)
+      if (mediaUrl.origin !== projectOrigin) return false
+      const match = mediaUrl.pathname.match(/^\/storage\/v1\/object\/public\/[^/]+\/orgs\/([^/]+)\//)
+      return Boolean(match && match[1] !== organizationId)
+    } catch {
+      return false
+    }
+  }).length
+}
