@@ -8,6 +8,7 @@ const adminA = '20000000-0000-4000-8000-000000000001'
 const adminB = '20000000-0000-4000-8000-000000000002'
 const editor = '20000000-0000-4000-8000-000000000003'
 const device = '30000000-0000-4000-8000-000000000001'
+const deviceB = '30000000-0000-4000-8000-000000000002'
 const secret = 'a'.repeat(64)
 const db = new PGlite()
 beforeAll(async () => {
@@ -46,8 +47,8 @@ async function as(role: 'anon' | 'authenticated', user = '') {
   await db.query("select set_config('request.jwt.claim.sub', $1, true)", [user])
   await db.exec(`set local role ${role}`)
 }
-async function pulse(org = orgA, key = secret) {
-  const result = await db.query<{ state: string }>('select public.display_heartbeat($1, $2, $3) as state', [org, device, key])
+async function pulse(org = orgA, key = secret, id = device) {
+  const result = await db.query<{ state: string }>('select public.display_heartbeat($1, $2, $3) as state', [org, id, key])
   return result.rows[0].state
 }
 it('anonymous enrollment defaults to pending and repeated calls reuse one row', async () => {
@@ -56,6 +57,31 @@ it('anonymous enrollment defaults to pending and repeated calls reuse one row', 
   expect(await pulse()).toBe('pending')
   await as('authenticated', adminA)
   expect((await db.query('select id from display_devices')).rows).toHaveLength(1)
+})
+it('allows an admin to turn off approval for only their company and restore it later', async () => {
+  await as('authenticated', adminA)
+  expect((await db.query<{ enabled: boolean }>('select public.get_display_control_enabled($1) as enabled', [orgA])).rows[0].enabled).toBe(true)
+  await db.query('select public.set_display_control_enabled($1, false)', [orgA])
+  await as('anon')
+  expect(await pulse()).toBe('enabled')
+  await as('authenticated', adminA)
+  expect((await db.query('select id from display_devices')).rows).toHaveLength(0)
+  await db.query('select public.set_display_control_enabled($1, true)', [orgA])
+  await as('anon')
+  expect(await pulse()).toBe('pending')
+  expect(await pulse(orgB, secret, deviceB)).toBe('pending')
+})
+it('does not let visitors change the switch', async () => {
+  await as('anon')
+  await expect(db.query('select public.set_display_control_enabled($1, false)', [orgA])).rejects.toThrow(/permission denied/)
+})
+it('does not let editors change the switch', async () => {
+  await as('authenticated', editor)
+  await expect(db.query('select public.set_display_control_enabled($1, false)', [orgA])).rejects.toThrow(/Not allowed/)
+})
+it('does not let another company change the switch', async () => {
+  await as('authenticated', adminB)
+  await expect(db.query('select public.set_display_control_enabled($1, false)', [orgA])).rejects.toThrow(/Not allowed/)
 })
 it('allows the organization dropdown query but only for the authenticated member company', async () => {
   await as('authenticated', adminA)

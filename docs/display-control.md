@@ -3,17 +3,25 @@
 ## Activacion
 
 1. Ejecutar `backend/supabase/display-control.sql` en el proyecto configurado, despues de `schema.sql`.
-2. Desplegar esta version de la web. No desplegar primero: los visores con empresa se detienen si falta la funcion SQL.
+2. Desplegar esta version de la web. Si el SQL aun no esta aplicado, el listado y la autorizacion existentes siguen funcionando, pero el interruptor aparece deshabilitado.
 3. Abrir el enlace del visor generado para una empresa (`#/display?org=...`) en cada pantalla.
 4. En Admin > Pantallas, actualizar y autorizar el codigo que aparece en la TV. Renombrarlo, por ejemplo, `Sucursal Centro - Caja`.
 
 Solo owner/admin de la misma organizacion pueden consultar o cambiar pantallas. Los editores no tienen ese permiso.
 
+## Interruptor por empresa
+
+- `Control de pantallas` empieza activado en todas las organizaciones, incluidas las nuevas.
+- Al desactivarlo, cualquier dispositivo con el enlace de esa empresa puede abrir su visor sin autorizacion. La pantalla deja de registrarse y el listado se oculta, pero los registros existentes se conservan para cuando se vuelva a activar.
+- Solo owner/admin puede cambiarlo. El cambio se guarda en Supabase, no en el navegador del administrador. Desactivar requiere confirmacion.
+- Una TV abierta aplica el cambio en la proxima comprobacion, normalmente en un maximo de 5 minutos. Si se reactiva, las pantallas nuevas quedan pendientes; las que ya estaban autorizadas conservan su permiso.
+- No convierte los archivos publicos de Storage en privados. El enlace y los archivos pueden compartirse; usar el control activado si es importante restringir el visor.
+
 ## Funcionamiento y consumo
 
 - Una identidad por navegador/perfil y organizacion, persistida en localStorage. Dos pestanas del mismo perfil cuentan como una pantalla registrada, no como dos sesiones.
 - La clave aleatoria de 256 bits no viaja en enlaces; la base guarda solo su hash SHA-256.
-- El primer registro siempre queda pendiente. Borrar datos del navegador crea otra solicitud pendiente; no concede autorizacion.
+- Con el control activado, el primer registro siempre queda pendiente. Borrar datos del navegador crea otra solicitud pendiente; no concede autorizacion.
 - El visor comprueba el estado cada 5 minutos, con timeout de 15 segundos, sin consultas superpuestas. Aproximadamente 288 consultas por dia de uso continuo y pantalla, mas aperturas/recargas.
 - Desactivado o pendiente: no se monta el reproductor ni se consulta la playlist; solo sigue la comprobacion de control para poder reactivarse.
 - Al desactivar se desmontan imagenes/videos y se cancelan la sincronizacion y las precargas pendientes. Una transferencia ya realizada no se puede recuperar.

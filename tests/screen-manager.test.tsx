@@ -3,10 +3,11 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { ScreenManager } from '../src/ScreenManager'
-import { listDisplayDevices, updateDisplayDevice } from '../src/displayControl'
+import { getDisplayControlEnabled, listDisplayDevices, setDisplayControlEnabled, updateDisplayDevice } from '../src/displayControl'
 
 vi.mock('../src/displayControl', () => ({
   HEARTBEAT_MS: 300_000, RECENT_MS: 660_000,
+  getDisplayControlEnabled: vi.fn(), setDisplayControlEnabled: vi.fn(),
   listDisplayDevices: vi.fn(), updateDisplayDevice: vi.fn(),
 }))
 let root: Root
@@ -23,6 +24,8 @@ beforeEach(() => {
     { id: 'screen-b', organization_id: 'org-a', name: 'Sucursal Norte', enabled: null, last_seen_at: new Date().toISOString() },
   ])
   vi.mocked(updateDisplayDevice).mockResolvedValue(undefined)
+  vi.mocked(getDisplayControlEnabled).mockResolvedValue(true)
+  vi.mocked(setDisplayControlEnabled).mockResolvedValue(undefined)
 })
 afterEach(async () => {
   await act(() => root.unmount())
@@ -41,6 +44,34 @@ it('counts recent authorized devices, not pending approvals', async () => {
   expect(listDisplayDevices).toHaveBeenCalledWith('org-a')
   expect(container.textContent).toContain('1 autorizadas con conexion reciente')
   expect(container.textContent).toContain('2 registradas')
+})
+it('keeps the existing device list usable until the Supabase migration is installed', async () => {
+  vi.mocked(getDisplayControlEnabled).mockRejectedValue(new Error('Function not found'))
+  await render()
+  expect(container.textContent).toContain('2 registradas')
+  expect(container.textContent).toContain('Function not found')
+  expect(container.querySelector<HTMLInputElement>('[role="switch"]')?.disabled).toBe(true)
+})
+it('warns before disabling approval and applies the switch only after saving', async () => {
+  await render()
+  const toggle = container.querySelector<HTMLInputElement>('[role="switch"]')!
+  vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+  await act(() => toggle.click())
+  expect(setDisplayControlEnabled).not.toHaveBeenCalled()
+  expect(toggle.checked).toBe(true)
+  await act(() => toggle.click())
+  expect(setDisplayControlEnabled).toHaveBeenCalledWith('org-a', false)
+  expect(toggle.checked).toBe(false)
+  expect(container.textContent).toContain('no necesitan autorizacion')
+})
+it('keeps approval enabled when saving the switch fails', async () => {
+  await render()
+  vi.spyOn(window, 'confirm').mockReturnValue(true)
+  vi.mocked(setDisplayControlEnabled).mockRejectedValue(new Error('Permiso denegado'))
+  const toggle = container.querySelector<HTMLInputElement>('[role="switch"]')!
+  await act(() => toggle.click())
+  expect(toggle.checked).toBe(true)
+  expect(container.textContent).toContain('Permiso denegado')
 })
 it('allows cancellation before disabling and scopes the confirmed command to the organization', async () => {
   await render()

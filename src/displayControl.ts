@@ -67,6 +67,19 @@ export async function listDisplayDevices(organizationId: string) {
   return data as DisplayDevice[]
 }
 
+export async function getDisplayControlEnabled(organizationId: string): Promise<boolean> {
+  const { data, error } = await getSupabase().rpc('get_display_control_enabled', { org_id: organizationId })
+  if (error || typeof data !== 'boolean') throw new Error(error?.message || 'No se pudo leer el control de pantallas.')
+  return data
+}
+
+export async function setDisplayControlEnabled(organizationId: string, enabled: boolean): Promise<void> {
+  const { data, error } = await getSupabase().rpc('set_display_control_enabled', {
+    org_id: organizationId, control_enabled: enabled,
+  })
+  if (error || data !== enabled) throw new Error(error?.message || 'No se pudo cambiar el control de pantallas.')
+}
+
 export async function updateDisplayDevice(id: string, organizationId: string, changes: { name?: string; enabled?: boolean }) {
   const { data, error } = await getSupabase().from('display_devices').update(changes)
     .eq('id', id).eq('organization_id', organizationId).select('id').single()

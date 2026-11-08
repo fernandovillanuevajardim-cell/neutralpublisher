@@ -13,6 +13,38 @@
 }
 
 .screen-manager h2 { font-size: 19px; margin: 0; }
+.screen-control-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 420px;
+  padding: 14px 0;
+  font-weight: 600;
+}
+.screen-control-toggle input {
+  appearance: none;
+  width: 42px;
+  height: 24px;
+  margin: 0;
+  border: 1px solid #74858e;
+  border-radius: 12px;
+  background: #74858e;
+  cursor: pointer;
+}
+.screen-control-toggle input::before {
+  content: '';
+  display: block;
+  width: 18px;
+  height: 18px;
+  margin: 2px;
+  border-radius: 50%;
+  background: white;
+  transition: transform 150ms ease;
+}
+.screen-control-toggle input:checked { background: #147d5a; border-color: #147d5a; }
+.screen-control-toggle input:checked::before { transform: translateX(18px); }
+.screen-control-toggle input:focus-visible { outline: 2px solid #172026; outline-offset: 3px; }
+.screen-control-toggle input:disabled { opacity: 0.5; cursor: wait; }
 .screen-list { padding: 0; margin: 0; list-style: none; }
 .screen-row {
   display: grid;

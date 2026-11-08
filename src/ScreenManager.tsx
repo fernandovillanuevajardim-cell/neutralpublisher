@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Check, MonitorPlay, Power, RefreshCw, Save } from 'lucide-react'
-import { HEARTBEAT_MS, RECENT_MS, listDisplayDevices, updateDisplayDevice, type DisplayDevice } from './displayControl'
+import { getDisplayControlEnabled, HEARTBEAT_MS, RECENT_MS, listDisplayDevices, setDisplayControlEnabled, updateDisplayDevice, type DisplayDevice } from './displayControl'
 
 function DeviceRow({ device, busy, now, onSave }: {
   device: DisplayDevice
@@ -30,6 +30,8 @@ function DeviceRow({ device, busy, now, onSave }: {
 
 export function ScreenManager({ organizationId, authenticated }: { organizationId: string; authenticated: boolean }) {
   const [devices, setDevices] = useState<DisplayDevice[]>([])
+  const [controlStatus, setControlStatus] = useState<{ organizationId: string; enabled: boolean } | null>(null)
+  const controlEnabled = controlStatus?.organizationId === organizationId ? controlStatus.enabled : null
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
   const [now, setNow] = useState(() => Date.now())
@@ -42,7 +44,19 @@ export function ScreenManager({ organizationId, authenticated }: { organizationI
     setNow(Date.now())
     try {
       const rows = await listDisplayDevices(organizationId)
-      if (mounted.current) { setDevices(rows); setMessage(''); setNow(Date.now()) }
+      let enabled: boolean | null = null
+      let modeError = ''
+      try {
+        enabled = await getDisplayControlEnabled(organizationId)
+      } catch (error) {
+        modeError = error instanceof Error ? error.message : 'No se pudo consultar el interruptor.'
+      }
+      if (mounted.current) {
+        setDevices(rows)
+        setControlStatus(enabled === null ? null : { organizationId, enabled })
+        setMessage(modeError)
+        setNow(Date.now())
+      }
     } catch (error) {
       if (mounted.current) setMessage(error instanceof Error ? error.message : 'No se pudieron consultar las pantallas.')
     } finally {
@@ -75,6 +89,21 @@ export function ScreenManager({ organizationId, authenticated }: { organizationI
     }
   }
 
+  const toggleControl = async (enabled: boolean) => {
+    if (!enabled && !window.confirm('Al desactivar el control, cualquier persona con el enlace de esta empresa podra ver su publicidad sin autorizacion. ¿Continuar?')) return
+    setBusy(true)
+    try {
+      await setDisplayControlEnabled(organizationId, enabled)
+      if (!mounted.current) return
+      setControlStatus({ organizationId, enabled })
+      setMessage(enabled ? 'Control activado. Las pantallas nuevas necesitaran autorizacion.' : 'Control desactivado. El visor abrira sin codigo en su proxima comprobacion.')
+    } catch (error) {
+      if (mounted.current) setMessage(error instanceof Error ? error.message : 'No se pudo cambiar el control de pantallas.')
+    } finally {
+      if (mounted.current) setBusy(false)
+    }
+  }
+
   const recentCount = devices.filter((d) => d.enabled && now - Date.parse(d.last_seen_at) < RECENT_MS).length
   return <section className="screen-manager">
     <div className="library-heading">
@@ -82,8 +111,15 @@ export function ScreenManager({ organizationId, authenticated }: { organizationI
       {organizationId && authenticated && <button className="icon-button" title="Actualizar pantallas" aria-label="Actualizar pantallas" disabled={busy} onClick={() => void refresh()}><RefreshCw size={18} /></button>}
     </div>
     {!authenticated ? <p>Inicia sesion para administrar las pantallas.</p> : !organizationId ? <p>Selecciona una empresa. Los visores sin empresa no tienen control remoto.</p> : <>
-      <p>{recentCount} autorizadas con conexion reciente · {devices.length} registradas</p>
-      {devices.length ? <ul className="screen-list">{devices.map((d) => <DeviceRow key={d.id} device={d} busy={busy} now={now} onSave={save} />)}</ul> : <p>{busy ? 'Consultando pantallas...' : 'Sin pantallas registradas.'}</p>}
+      <label className="screen-control-toggle">
+        <span>Control de pantallas</span>
+        <input type="checkbox" role="switch" checked={controlEnabled ?? true} disabled={busy || controlEnabled === null}
+          onChange={(event) => void toggleControl(event.target.checked)} />
+      </label>
+      {controlEnabled === false ? <p>Desactivado: las pantallas con el enlace de esta empresa no necesitan autorizacion.</p> : <>
+        <p>{recentCount} autorizadas con conexion reciente · {devices.length} registradas</p>
+        {devices.length ? <ul className="screen-list">{devices.map((d) => <DeviceRow key={d.id} device={d} busy={busy} now={now} onSave={save} />)}</ul> : <p>{busy ? 'Consultando pantallas...' : 'Sin pantallas registradas.'}</p>}
+      </>}
       {message && <p className="status-message" role="status">{message}</p>}
     </>}
   </section>

@@ -1,6 +1,9 @@
 -- Run after schema.sql. No media or existing playlists are modified.
 begin;
 
+alter table public.organizations
+  add column if not exists display_control_enabled boolean not null default true;
+
 create table if not exists public.display_devices (
   id uuid primary key,
   organization_id uuid not null references public.organizations(id) on delete cascade,
@@ -31,10 +34,14 @@ returns text language plpgsql security definer set search_path = '' as $$
 declare
   device public.display_devices%rowtype;
   hashed bytea;
+  control_enabled boolean;
 begin
   if device_secret is null or device_secret !~ '^[a-f0-9]{64}$' or device_id is null or org_id is null then
     raise exception 'Invalid device credentials';
   end if;
+  select display_control_enabled into control_enabled from public.organizations where id = org_id;
+  if not found then raise exception 'Organization unavailable'; end if;
+  if not control_enabled then return 'enabled'; end if;
   hashed := pg_catalog.sha256(pg_catalog.convert_to(device_secret, 'UTF8'));
   select * into device from public.display_devices where id = device_id;
   if not found then
@@ -62,5 +69,27 @@ end;
 $$;
 revoke all on function public.display_heartbeat(uuid, uuid, text) from public, anon, authenticated;
 grant execute on function public.display_heartbeat(uuid, uuid, text) to anon, authenticated;
+
+create or replace function public.get_display_control_enabled(org_id uuid)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select display_control_enabled from public.organizations
+    where id = org_id and public.can_admin_org(org_id);
+$$;
+revoke all on function public.get_display_control_enabled(uuid) from public, anon, authenticated;
+grant execute on function public.get_display_control_enabled(uuid) to authenticated;
+
+create or replace function public.set_display_control_enabled(org_id uuid, control_enabled boolean)
+returns boolean language plpgsql security definer set search_path = '' as $$
+begin
+  if control_enabled is null or not public.can_admin_org(org_id) then
+    raise exception 'Not allowed to change display control';
+  end if;
+  update public.organizations set display_control_enabled = control_enabled where id = org_id;
+  if not found then raise exception 'Organization unavailable'; end if;
+  return control_enabled;
+end;
+$$;
+revoke all on function public.set_display_control_enabled(uuid, boolean) from public, anon, authenticated;
+grant execute on function public.set_display_control_enabled(uuid, boolean) to authenticated;
 notify pgrst, 'reload schema';
 commit;
